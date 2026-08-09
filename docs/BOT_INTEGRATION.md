@@ -84,7 +84,17 @@ should preserve them:
   posts go through a bounded queue on a background daemon thread, and every
   failure path ends in a log line rather than an exception.
 - **Telegram must not depend on TradeOS.** Each override calls `super()` first,
-  so a TradeOS outage can never suppress a trade alert.
+  so a TradeOS outage can never suppress a trade alert. (The bot now runs with
+  Telegram disabled — `[telegram] enabled = false` — and the inherited method
+  writes an `[alert]` line to the local log instead, which stays useful as an
+  on-disk audit trail. Re-enabling is one config flag.)
+- **Drain the queue on shutdown.** A session's *last* events — the final exit
+  and closing equity — are enqueued moments before the bot exits, so tearing
+  the sender down immediately loses exactly the records that close out the
+  day's P&L. `close()` waits for the queue to empty and for the in-flight
+  request to return, bounded so a wedged endpoint still can't hang the exit.
+  This was caught in testing: the trade sat in TradeOS as `OPEN` forever
+  because the `CLOSED` post was discarded at shutdown.
 
 Configuration is environment-only, so nothing in `config.ini` needs to change
 and the bot behaves exactly as before when the variables are absent:
