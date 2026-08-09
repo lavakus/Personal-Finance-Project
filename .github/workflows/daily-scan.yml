@@ -1,24 +1,36 @@
-name: daily-scan (Phase 5 — disabled until Supabase sync lands)
+name: daily-scan
 
-# Runs the swingscan Indian scanner after NSE close and will write results
-# into Supabase (scan_runs / stock_rankings / trade_plans) once Phase 5's
-# sync script exists. Kept workflow_dispatch-only until then so nothing
-# burns Actions minutes silently.
+# Runs the swingscan Indian scanner after NSE close and publishes results
+# into Supabase (scan_runs / stock_rankings / trade_plans / regime /
+# sector rankings). Requires repo secrets:
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# Enable the schedule once the secrets are set; workflow_dispatch works
+# any time for a manual run.
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: "45 10 * * 1-5"   # 16:15 IST, Mon-Fri (UTC+5:30)
+  schedule:
+    - cron: "45 10 * * 1-5"   # 16:15 IST, Mon-Fri (UTC+5:30)
 
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync
-      - run: uv run swingscan scan
+      - name: Scan and publish to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: uv run python -m swingscan.publish
+      - name: Save text report artifact
+        if: always()
+        run: uv run swingscan scan || true
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: scan-report
           path: reports/
+          if-no-files-found: ignore

@@ -8,8 +8,16 @@ import {
   demoRegime,
   demoSetups,
 } from "@/lib/demo-data";
+import Link from "next/link";
+
 import { getIndexQuotes, type QuoteRow } from "@/lib/data/market";
 import { getPortfolioSummary, isMigrationPending } from "@/lib/data/portfolio";
+import {
+  getLatestRegime,
+  getLatestScan,
+  type RegimeRow,
+  type ScanRunRow,
+} from "@/lib/data/scanner";
 import { getTrades, type TradeComputed } from "@/lib/data/trades";
 import { isDemoMode } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -28,6 +36,9 @@ export default async function DashboardPage() {
   let live = null;
   let liveTrades: TradeComputed[] | null = null;
   let liveQuotes: QuoteRow[] | null = null;
+  let liveScan: ScanRunRow | null = null;
+  let liveRegime: RegimeRow | null = null;
+  let scanReady = false;
   let migrationNotice = false;
   if (!isDemoMode) {
     const sb = await createServerSupabase();
@@ -50,6 +61,16 @@ export default async function DashboardPage() {
     } catch (e) {
       if (!isMigrationPending(e)) throw e;
       // 0004 pending — markets card falls back to its placeholder
+    }
+    try {
+      [liveScan, liveRegime] = await Promise.all([
+        getLatestScan(sb),
+        getLatestRegime(sb),
+      ]);
+      scanReady = true;
+    } catch (e) {
+      if (!isMigrationPending(e)) throw e;
+      // 0005 pending — setups card falls back to its placeholder
     }
   }
 
@@ -187,11 +208,87 @@ export default async function DashboardPage() {
         ) : null}
       </Card>
 
-      {/* top setups */}
+      {/* top setups — live from the latest published scan since P5 */}
       <Card title="Top setups (scanner)" className="col-span-12 xl:col-span-7"
-            action={isDemoMode ? <Badge tone="demo">demo</Badge> : undefined}>
+            action={
+              isDemoMode ? (
+                <Badge tone="demo">demo</Badge>
+              ) : liveRegime ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-(--color-text-faint)">
+                    regime
+                  </span>
+                  <Badge tone={liveRegime.label.includes("BULL") ? "gain" : liveRegime.label.includes("BEAR") ? "loss" : "warn"}>
+                    {liveRegime.label}
+                  </Badge>
+                </div>
+              ) : undefined
+            }>
         {!isDemoMode ? (
-          <PhasePending phase={5} what="The swingscan screener with explainable scores" />
+          !scanReady ? (
+            <PhasePending phase={5} what="The swingscan screener (migration 0005 pending)" />
+          ) : !liveScan ? (
+            <p className="py-4 text-center text-[13px] text-(--color-text-faint)">
+              No scans published yet — trigger the daily-scan GitHub Action or
+              run <span className="font-mono">python -m swingscan.publish</span>.
+            </p>
+          ) : liveScan.no_trade ? (
+            <div className="py-4 text-center">
+              <div className="font-bold tracking-wide text-(--color-warn)">
+                NO HIGH-QUALITY SETUPS — {liveScan.run_date}
+              </div>
+              <p className="mt-1 text-[12px] text-(--color-text-dim)">
+                {liveScan.no_trade_reason}
+              </p>
+            </div>
+          ) : (
+            <>
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-wider text-(--color-text-faint)">
+                    <th className="pb-2 font-medium">Symbol</th>
+                    <th className="pb-2 font-medium">Setup</th>
+                    <th className="pb-2 font-medium">Score</th>
+                    <th className="pb-2 text-right font-medium">Entry zone</th>
+                    <th className="pb-2 text-right font-medium">Stop</th>
+                    <th className="pb-2 text-right font-medium">T1 / T2</th>
+                    <th className="pb-2 text-right font-medium">R:R</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {liveScan.stock_rankings.slice(0, 5).map((s) => {
+                    const p = s.trade_plans;
+                    return (
+                      <tr key={s.id} className="border-t border-(--color-border)">
+                        <td className="py-2 font-semibold">{s.symbol}</td>
+                        <td><Badge tone="accent">{s.setup_type}</Badge></td>
+                        <td className="num">
+                          {Number(s.score_total).toFixed(0)}{" "}
+                          <span className="text-(--color-text-faint)">({s.score_tier})</span>
+                        </td>
+                        <td className="num text-right">
+                          {p ? `₹${Number(p.entry_low).toLocaleString("en-IN")}–${Number(p.entry_high).toLocaleString("en-IN")}` : "—"}
+                        </td>
+                        <td className="num text-right text-(--color-loss)">
+                          {p ? `₹${Number(p.stop).toLocaleString("en-IN")}` : "—"}
+                        </td>
+                        <td className="num text-right">
+                          {p ? `₹${Number(p.t1).toLocaleString("en-IN")} / ₹${Number(p.t2).toLocaleString("en-IN")}` : "—"}
+                        </td>
+                        <td className="num text-right">{p ? Number(p.rr1).toFixed(1) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-3 text-[11px] text-(--color-text-faint)">
+                {liveScan.run_date} scan ·{" "}
+                <Link href="/screener" className="text-(--color-accent) underline decoration-dotted">
+                  full screener with explainable scores →
+                </Link>
+              </p>
+            </>
+          )
         ) : (
         <>
         <table className="w-full text-left text-[13px]">
