@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type { DataFreshness, SystemHealth } from "@tradeos/types";
 
 import { isDemoMode } from "@/lib/env";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { createAdminSupabase } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +19,14 @@ function freshnessFrom(
 }
 
 /**
- * System health (brief §84). Every status is derived from real row
- * timestamps — nothing is ever faked green, and a missing table reports
- * UNAVAILABLE rather than erroring the endpoint.
+ * System health (brief §84). Reports only aggregate freshness — no user
+ * data ever leaves this endpoint — so it doubles as an uptime probe.
+ *
+ * It reads through the service-role client on purpose: the anon client is
+ * subject to RLS, which returns ZERO ROWS (not an error) to an unauthenticated
+ * caller, making every check look simultaneously "connected" and "no data".
+ * Row COUNTS are used instead of row contents, so nothing readable is
+ * returned even for the per-user notifications table.
  */
 export async function GET() {
   if (isDemoMode) {
@@ -46,16 +51,20 @@ export async function GET() {
   let notifications = false;
 
   try {
-    const sb = await createServerSupabase();
-    const { error } = await sb.from("asset_classes").select("code").limit(1);
-    database = !error;
+    const admin = createAdminSupabase();
+
+    // Connectivity: a seeded reference table must return at least one row.
+    // Bypassing RLS means an empty result is a genuine failure, not a policy.
+    const conn = await admin.from("asset_classes").select("code").limit(1);
+    database = !conn.error && (conn.data?.length ?? 0) > 0;
 
     const [quotes, articles, scans, providers, notifs] = await Promise.all([
-      sb.from("market_quotes").select("as_of").order("as_of", { ascending: false }).limit(1),
-      sb.from("news_articles").select("published_at").order("published_at", { ascending: false }).limit(1),
-      sb.from("scan_runs").select("created_at").order("created_at", { ascending: false }).limit(1),
-      sb.from("data_provider_status").select("last_success_at").order("last_success_at", { ascending: false }).limit(1),
-      sb.from("notifications").select("id").limit(1),
+      admin.from("market_quotes").select("as_of").order("as_of", { ascending: false }).limit(1),
+      admin.from("news_articles").select("published_at").order("published_at", { ascending: false }).limit(1),
+      admin.from("scan_runs").select("created_at").order("created_at", { ascending: false }).limit(1),
+      admin.from("data_provider_status").select("last_success_at").order("last_success_at", { ascending: false }).limit(1),
+      // head:true returns the count only — no notification rows are read.
+      admin.from("notifications").select("id", { count: "exact", head: true }),
     ]);
 
     // Quotes/news refresh on demand; scans run once per trading day, so a
@@ -66,7 +75,7 @@ export async function GET() {
     if (!providers.error) cron = freshnessFrom(providers.data?.[0]?.last_success_at, 30);
     notifications = !notifs.error;
   } catch {
-    // leave the honest defaults in place
+    // service-role env missing or database unreachable — honest defaults stand
   }
 
   const health: SystemHealth = {
