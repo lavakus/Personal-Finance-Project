@@ -225,21 +225,50 @@ export const AssetInputSchema = z.object({
 export type AssetInput = z.infer<typeof AssetInputSchema>;
 
 export const TradeInputSchema = z.object({
-  symbol: z.string().min(1),
-  assetClass: AssetClass,
+  assetId: z.string().uuid(),
   direction: TradeDirection,
+  status: z.enum(["PLANNED", "ACTIVE"]).default("ACTIVE"),
   entryPrice: decimalString,
   quantity: decimalString,
   stopLoss: decimalString,
-  target1: decimalString.nullable(),
-  target2: decimalString.nullable(),
-  strategyVersionId: z.string().uuid().nullable(),
-  setup: SetupType.nullable(),
+  target1: decimalString.nullable().default(null),
+  target2: decimalString.nullable().default(null),
+  strategyVersionId: z.string().uuid().nullable().default(null),
+  setup: SetupType.nullable().default(null),
   entryDate: z.string(),
   reason: z.string().max(4000).optional(),
   notes: z.string().max(4000).optional(),
 });
 export type TradeInput = z.infer<typeof TradeInputSchema>;
+
+export const TradeExitInputSchema = z.object({
+  exitPrice: decimalString,
+  quantity: decimalString,
+  fees: decimalString.default("0"),
+  exitDate: z.string(),
+  exitReason: z.string().max(2000).optional(),
+});
+export type TradeExitInput = z.infer<typeof TradeExitInputSchema>;
+
+export const TradeReviewInputSchema = z.object({
+  followedStrategy: z.boolean().nullable().default(null),
+  followedEntry: z.boolean().nullable().default(null),
+  respectedStop: z.boolean().nullable().default(null),
+  followedTarget: z.boolean().nullable().default(null),
+  exitedEarly: z.boolean().nullable().default(null),
+  chasedEntry: z.boolean().nullable().default(null),
+  movedStop: z.boolean().nullable().default(null),
+  emotion: z.string().max(200).optional(),
+  lessons: z.string().max(4000).optional(),
+});
+export type TradeReviewInput = z.infer<typeof TradeReviewInputSchema>;
+
+export const StrategyInputSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(2000).optional(),
+  version: z.string().min(1).max(20).default("1.0"),
+});
+export type StrategyInput = z.infer<typeof StrategyInputSchema>;
 
 export const OHLCVBarSchema = z.object({
   date: z.string(),

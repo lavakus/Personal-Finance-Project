@@ -11,6 +11,8 @@ import {
   riskReward,
   rMultiple,
   strategyStats,
+  tradeRealizedPnl,
+  tradeRMultiple,
   unrealizedPnl,
   walkLedger,
 } from "../src/index";
@@ -178,5 +180,47 @@ describe("cash ledger (brief §11)", () => {
       { type: "DEPOSIT", amount: "0.2" },
     ]);
     expect(bal.toString()).toBe("0.3");
+  });
+});
+
+describe("trade P&L with partial exits (brief §15)", () => {
+  it("LONG partial exits net of fees", () => {
+    const pnl = tradeRealizedPnl({
+      direction: "LONG",
+      entryPrice: "100",
+      exits: [
+        { exitPrice: "110", quantity: "5", fees: "2" },   // 50 - 2 = 48
+        { exitPrice: "95", quantity: "5", fees: "1" },    // -25 - 1 = -26
+      ],
+    });
+    expect(pnl.toString()).toBe("22");
+  });
+
+  it("SHORT profits when price falls", () => {
+    const pnl = tradeRealizedPnl({
+      direction: "SHORT",
+      entryPrice: "100",
+      exits: [{ exitPrice: "90", quantity: "10" }],
+    });
+    expect(pnl.toString()).toBe("100");
+  });
+
+  it("weighted R across exits: risk 5, avg pnl/unit 2.2 -> 0.44R", () => {
+    const r = tradeRMultiple({
+      direction: "LONG",
+      entryPrice: "100",
+      stopLoss: "95",
+      exits: [
+        { exitPrice: "110", quantity: "5", fees: "2" },
+        { exitPrice: "95", quantity: "5", fees: "1" },
+      ],
+    });
+    expect(r.toString()).toBe("0.44");
+  });
+
+  it("no exits -> 0R, no division blowup", () => {
+    expect(
+      tradeRMultiple({ direction: "LONG", entryPrice: 100, stopLoss: 95, exits: [] }).toString()
+    ).toBe("0");
   });
 });

@@ -9,6 +9,7 @@ import {
   demoSetups,
 } from "@/lib/demo-data";
 import { getPortfolioSummary, isMigrationPending } from "@/lib/data/portfolio";
+import { getTrades, type TradeComputed } from "@/lib/data/trades";
 import { isDemoMode } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 
@@ -24,13 +25,23 @@ export default async function DashboardPage() {
   const fmtINR = (v: string) => `₹${Number(v).toLocaleString("en-IN")}`;
 
   let live = null;
+  let liveTrades: TradeComputed[] | null = null;
   let migrationNotice = false;
   if (!isDemoMode) {
+    const sb = await createServerSupabase();
     try {
-      live = await getPortfolioSummary(await createServerSupabase());
+      live = await getPortfolioSummary(sb);
     } catch (e) {
       if (!isMigrationPending(e)) throw e;
       migrationNotice = true;
+    }
+    try {
+      liveTrades = (await getTrades(sb)).filter((t) =>
+        ["ACTIVE", "PARTIALLY_CLOSED"].includes(t.row.status)
+      );
+    } catch (e) {
+      if (!isMigrationPending(e)) throw e;
+      // 0003 pending — trades card falls back to its placeholder
     }
   }
 
@@ -184,11 +195,39 @@ export default async function DashboardPage() {
         )}
       </Card>
 
-      {/* active trades */}
+      {/* active trades — live from the journal since P3 */}
       <Card title="Active trades" className="col-span-12 md:col-span-6 xl:col-span-5"
             action={isDemoMode ? <Badge tone="demo">demo</Badge> : undefined}>
         {!isDemoMode ? (
-          <PhasePending phase={3} what="Your trade journal's open positions" />
+          liveTrades === null ? (
+            <PhasePending phase={3} what="Your trade journal's open positions (migration 0003 pending)" />
+          ) : liveTrades.length === 0 ? (
+            <p className="py-4 text-center text-[13px] text-(--color-text-faint)">
+              No active trades. NO TRADE is a position too.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {liveTrades.map((t) => (
+                <div key={t.row.id}
+                     className="flex items-center justify-between rounded border border-(--color-border) bg-(--color-surface-2) px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{t.row.assets?.symbol ?? "?"}</span>
+                    <Badge tone="neutral">{t.row.direction}</Badge>
+                    <Badge tone={t.row.status === "ACTIVE" ? "accent" : "warn"}>
+                      {t.row.status.replace("_", " ")}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="num text-xs text-(--color-text-dim)">
+                      entry {Number(t.row.entry_price).toLocaleString("en-IN")} · SL{" "}
+                      {Number(t.row.stop_loss).toLocaleString("en-IN")}
+                    </span>
+                    <span className="num text-xs text-(--color-text-dim)">{t.holdingDays}d</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         ) : (
         <div className="space-y-2">
           {demoActiveTrades.map((t) => (

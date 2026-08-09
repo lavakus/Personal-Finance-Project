@@ -190,6 +190,46 @@ export function allocationPct(partValue: Dec, totalValue: Dec): Decimal {
   return d(partValue).div(total).times(100);
 }
 
+// ──────────────────────────────────── trade P&L with partial exits (§15)
+
+export interface TradeExitLot {
+  exitPrice: Dec;
+  quantity: Dec;
+  fees?: Dec;
+}
+
+/** Realized P&L across all (partial) exits, net of exit fees. */
+export function tradeRealizedPnl(params: {
+  direction: "LONG" | "SHORT";
+  entryPrice: Dec;
+  exits: TradeExitLot[];
+}): Decimal {
+  const entry = d(params.entryPrice);
+  return params.exits.reduce((acc, e) => {
+    const perUnit =
+      params.direction === "LONG"
+        ? d(e.exitPrice).minus(entry)
+        : entry.minus(d(e.exitPrice));
+    return acc.plus(perUnit.times(d(e.quantity))).minus(d(e.fees ?? 0));
+  }, d(0));
+}
+
+/** Quantity-weighted R multiple across partial exits. */
+export function tradeRMultiple(params: {
+  direction: "LONG" | "SHORT";
+  entryPrice: Dec;
+  stopLoss: Dec;
+  exits: TradeExitLot[];
+}): Decimal {
+  const entry = d(params.entryPrice);
+  const risk = entry.minus(d(params.stopLoss)).abs();
+  if (risk.isZero()) return d(0);
+  const totalQty = params.exits.reduce((a, e) => a.plus(d(e.quantity)), d(0));
+  if (totalQty.isZero()) return d(0);
+  const pnl = tradeRealizedPnl(params);
+  return pnl.div(totalQty).div(risk);
+}
+
 // ─────────────────────────────────────────── trade stats (§56 basis)
 
 export interface TradeStat {
