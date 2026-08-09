@@ -112,9 +112,11 @@ export const yahooProvider: MarketDataProvider = {
   },
 };
 
-/** NSE equity symbol → Yahoo ticker (RELIANCE → RELIANCE.NS). */
+/** NSE equity symbol → Yahoo ticker (RELIANCE → RELIANCE.NS). Symbols that
+ *  are already Yahoo-native (indices ^NSEI, futures GC=F, FX USDINR=X,
+ *  dotted tickers) pass through unchanged. */
 export function nseToYahoo(symbol: string): string {
-  return symbol.includes(".") || symbol.startsWith("^")
+  return symbol.includes(".") || symbol.includes("=") || symbol.startsWith("^")
     ? symbol
     : `${symbol}.NS`;
 }

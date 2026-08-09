@@ -8,9 +8,17 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
+// API routes enforce their own auth (session, CRON_SECRET bearer, or bot
+// HMAC) — a login REDIRECT is the wrong response for a machine caller.
+const SELF_AUTHENTICATED_API = ["/api/jobs/", "/api/bots/", "/api/health"];
+
 export async function middleware(request: NextRequest) {
   // DEMO MODE: no Supabase configured -> no auth wall, demo data only.
   if (isDemoMode) return NextResponse.next();
+
+  if (SELF_AUTHENTICATED_API.some((p) => request.nextUrl.pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
