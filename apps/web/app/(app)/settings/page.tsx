@@ -2,7 +2,7 @@ import { Badge, Card } from "@/components/ui";
 import { isDemoMode } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 
-import { RefreshMarketData, RefreshNews } from "./refresh-button";
+import { RefreshMarketData, RefreshNews, RunJob } from "./refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +98,17 @@ export default async function SettingsPage() {
               automatic stock mapping.
             </p>
             <RefreshNews />
+          </div>
+          <div className="mt-3 border-t border-(--color-border) pt-3">
+            <p className="mb-3 text-[13px] text-(--color-text-dim)">
+              Evaluate alert rules (price levels, earnings proximity, stale
+              bots) and generate notifications.
+            </p>
+            <RunJob
+              endpoint="/api/jobs/alerts"
+              label="Run alert engine now"
+              describe={(b) => `Created ${b.created} notifications`}
+            />
           </div>
         </Card>
       ) : null}

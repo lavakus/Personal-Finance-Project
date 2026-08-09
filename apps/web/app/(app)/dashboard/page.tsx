@@ -53,6 +53,7 @@ export default async function DashboardPage() {
     event_type: string;
     event_date: string;
   }> | null = null;
+  let liveBots: Array<{ id: string; name: string; online: boolean }> | null = null;
   if (!isDemoMode) {
     const sb = await createServerSupabase();
     try {
@@ -102,6 +103,21 @@ export default async function DashboardPage() {
     // errors here mean 0006 is pending — cards fall back to placeholders
     if (!newsRes.error) liveNews = newsRes.data;
     if (!eventsRes.error) liveEvents = eventsRes.data;
+
+    const botsRes = await sb
+      .from("bots")
+      .select("id, name, last_heartbeat_at")
+      .order("created_at")
+      .limit(6);
+    if (!botsRes.error) {
+      liveBots = botsRes.data.map((b) => ({
+        id: b.id,
+        name: b.name,
+        online: b.last_heartbeat_at
+          ? Date.now() - new Date(b.last_heartbeat_at).getTime() < 30 * 60000
+          : false,
+      }));
+    }
   }
 
   return (
@@ -495,9 +511,30 @@ export default async function DashboardPage() {
         )}
       </Card>
 
-      {/* bots placeholder */}
+      {/* bots — live since P8 */}
       <Card title="Bots" className="col-span-12 md:col-span-6 xl:col-span-4">
-        <PhasePending phase={8} what="Bot ingestion API, equity curves and comparisons" />
+        {!isDemoMode ? (
+          liveBots === null ? (
+            <PhasePending phase={8} what="Bots (migration 0007 pending)" />
+          ) : liveBots.length === 0 ? (
+            <p className="py-4 text-center text-[13px] text-(--color-text-faint)">
+              No bots registered — set one up on the Bots page.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {liveBots.map((b) => (
+                <li key={b.id} className="flex items-center justify-between rounded border border-(--color-border) bg-(--color-surface-2) px-3 py-2 text-[13px]">
+                  <span className="font-semibold">{b.name}</span>
+                  <Badge tone={b.online ? "gain" : "warn"}>
+                    {b.online ? "ONLINE" : "STALE"}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : (
+          <PhasePending phase={8} what="Bot ingestion API, equity curves and comparisons" />
+        )}
       </Card>
     </div>
   );
