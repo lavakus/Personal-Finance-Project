@@ -1,0 +1,27 @@
+# python (swingscan)
+__pycache__/
+*.pyc
+.venv/
+cache/
+reports/
+.pytest_cache/
+*.egg-info/
+
+# node / monorepo
+node_modules/
+.next/
+out/
+dist/
+.expo/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# env & secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# os
+.DS_Store
+Thumbs.db

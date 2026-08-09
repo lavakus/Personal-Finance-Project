@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "TradeOS",
+    "slug": "tradeos",
+    "version": "0.1.0",
+    "scheme": "tradeos",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0a0e14",
+    "platforms": ["ios", "android"],
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "android": {
+      "package": "com.tradeos.app"
+    },
+    "ios": {
+      "bundleIdentifier": "com.tradeos.app"
+    }
+  }
+}

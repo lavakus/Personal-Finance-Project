@@ -1,0 +1,22 @@
+{
+  "name": "tradeos",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Personal investment & trading intelligence platform (web + mobile + Supabase + swingscan quant engine)",
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present && npm run typecheck:mobile",
+    "typecheck:mobile": "cd apps/mobile && npm run typecheck",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspace apps/web",
+    "dev:web": "npm run dev --workspace apps/web",
+    "dev:mobile": "cd apps/mobile && npx expo start"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

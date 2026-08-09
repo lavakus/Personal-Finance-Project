@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* ── TradeOS dark terminal theme ─────────────────────────────────────
+   Dense, professional, high-contrast financial UI. Single dark theme by
+   design (terminal aesthetic), tuned for long reading sessions. */
+
+@theme {
+  --color-bg: #0a0e14;            /* app background */
+  --color-surface: #10151f;       /* cards */
+  --color-surface-2: #161d2a;     /* raised / hover */
+  --color-border: #1f2937;
+  --color-border-strong: #2b3648;
+
+  --color-text: #e2e8f0;
+  --color-text-dim: #8b98ab;
+  --color-text-faint: #5b6778;
+
+  --color-accent: #38bdf8;        /* interactive / links */
+  --color-gain: #34d399;          /* green P&L */
+  --color-loss: #f87171;          /* red P&L */
+  --color-warn: #fbbf24;
+  --color-demo: #a78bfa;          /* demo-mode violet */
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+}
+
+html {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* numbers always tabular in a terminal */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.25);
+}
+
+/* thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}

@@ -1,0 +1,12 @@
+# Optional overrides for swingscan. Any key mirrors swingscan/config.py.
+# Values here are hypotheses — validate changes with `swingscan walkforward`.
+#
+# Example:
+# liquidity:
+#   min_price: 100
+#   min_avg_traded_value: 50000000
+# volume:
+#   breakout_vol_mult: 1.5
+# risk:
+#   account_capital: 1000000
+#   risk_per_trade_pct: 0.5

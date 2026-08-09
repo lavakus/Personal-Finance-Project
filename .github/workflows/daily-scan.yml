@@ -1,0 +1,24 @@
+name: daily-scan (Phase 5 — disabled until Supabase sync lands)
+
+# Runs the swingscan Indian scanner after NSE close and will write results
+# into Supabase (scan_runs / stock_rankings / trade_plans) once Phase 5's
+# sync script exists. Kept workflow_dispatch-only until then so nothing
+# burns Actions minutes silently.
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "45 10 * * 1-5"   # 16:15 IST, Mon-Fri (UTC+5:30)
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: uv run swingscan scan
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scan-report
+          path: reports/
