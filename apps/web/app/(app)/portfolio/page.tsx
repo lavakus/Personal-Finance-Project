@@ -109,7 +109,86 @@ export default async function PortfolioPage() {
           <HoldingsTable rows={summary.holdings} />
         )}
       </Card>
+
+      <RiskCard summary={summary} />
     </div>
+  );
+}
+
+/** Portfolio risk (brief §48). Warnings only — nothing is ever blocked. */
+function RiskCard({
+  summary,
+}: {
+  summary: {
+    holdings: Array<{
+      symbol: string;
+      assetClass: string;
+      quantity: string;
+      allocationPct: string | null;
+      currentValue: string | null;
+    }>;
+    cashByAccount: Array<{ accountName: string; balance: string; currency: string }>;
+  };
+}) {
+  const open = summary.holdings.filter((h) => Number(h.quantity) > 0);
+  const priced = open.filter((h) => h.allocationPct !== null);
+
+  const warnings: string[] = [];
+  for (const h of priced) {
+    const a = Number(h.allocationPct);
+    if (a >= 30) warnings.push(`${h.symbol} is ${a.toFixed(0)}% of the priced portfolio — very high concentration.`);
+    else if (a >= 20) warnings.push(`${h.symbol} is ${a.toFixed(0)}% of the priced portfolio — high concentration.`);
+  }
+  const classTotals = new Map<string, number>();
+  for (const h of priced) {
+    classTotals.set(
+      h.assetClass,
+      (classTotals.get(h.assetClass) ?? 0) + Number(h.allocationPct)
+    );
+  }
+  for (const [cls, pct] of classTotals) {
+    if (pct >= 70 && classTotals.size > 1) {
+      warnings.push(`${cls.replace("_IN", "")} is ${pct.toFixed(0)}% of the priced portfolio — heavy asset-class tilt.`);
+    }
+  }
+  for (const c of summary.cashByAccount) {
+    if (Number(c.balance) < 0) {
+      warnings.push(`Account "${c.accountName}" cash is negative (${c.balance} ${c.currency}) — the ledger is missing a DEPOSIT.`);
+    }
+  }
+  const unpriced = open.length - priced.length;
+
+  return (
+    <Card title="Risk">
+      {priced.length > 0 ? (
+        <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-(--color-text-dim)">
+          {[...classTotals.entries()].map(([cls, pct]) => (
+            <span key={cls}>
+              <span className="text-(--color-text-faint)">{cls.replace("_IN", "")}</span>{" "}
+              <span className="num font-semibold text-(--color-text)">{pct.toFixed(1)}%</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {warnings.length === 0 ? (
+        <p className="text-[13px] text-(--color-text-dim)">
+          No concentration warnings{unpriced > 0 ? ` (${unpriced} unpriced holding${unpriced > 1 ? "s" : ""} excluded — refresh market data)` : ""}.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {warnings.map((w) => (
+            <li key={w} className="rounded border border-(--color-warn)/40 bg-(--color-warn)/10 px-3 py-2 text-[12px] text-(--color-warn)">
+              ⚠ {w}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-[11px] text-(--color-text-faint)">
+        Warnings are informational — nothing is blocked (brief §48). Sector
+        exposure and correlation checks activate as sector mapping and price
+        history accumulate.
+      </p>
+    </Card>
   );
 }
 

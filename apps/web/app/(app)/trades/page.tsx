@@ -5,6 +5,7 @@ import { demoActiveTrades } from "@/lib/demo-data";
 import { isDemoMode } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 
+import { PositionCalculator } from "./position-calculator";
 import { ExitTrade, NewTrade, ReviewTrade } from "./trade-forms";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +59,10 @@ export default async function TradesPage() {
 
   return (
     <div className="space-y-4">
-      <NewTrade strategies={strategyOpts} />
+      <div className="flex flex-wrap items-start gap-2">
+        <NewTrade strategies={strategyOpts} />
+        <PositionCalculator />
+      </div>
 
       <Card title={`Open positions (${open.length})`}>
         {open.length === 0 ? (
