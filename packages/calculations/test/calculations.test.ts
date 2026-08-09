@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   allocationPct,
   cagr,
+  cashBalance,
+  cashDelta,
   d,
   positionSize,
   returnPct,
@@ -146,5 +148,35 @@ describe("strategyStats", () => {
   });
   it("empty input returns zeros", () => {
     expect(strategyStats([]).trades).toBe(0);
+  });
+});
+
+describe("cash ledger (brief §11)", () => {
+  it("signed deltas per transaction type", () => {
+    expect(cashDelta({ type: "DEPOSIT", amount: 1000 }).toString()).toBe("1000");
+    expect(cashDelta({ type: "WITHDRAWAL", amount: 400 }).toString()).toBe("-400");
+    expect(cashDelta({ type: "BUY", amount: 500, fees: 5 }).toString()).toBe("-505");
+    expect(cashDelta({ type: "SELL", amount: 600, fees: 6 }).toString()).toBe("594");
+    expect(cashDelta({ type: "DIVIDEND", amount: 50 }).toString()).toBe("50");
+    expect(cashDelta({ type: "FEE", amount: 20 }).toString()).toBe("-20");
+    expect(cashDelta({ type: "TRANSFER", amount: 300 }).toString()).toBe("-300");
+  });
+
+  it("balance walks the full ledger with decimal precision", () => {
+    const bal = cashBalance([
+      { type: "DEPOSIT", amount: "100000" },
+      { type: "BUY", amount: "80940", fees: "42.7" },
+      { type: "SELL", amount: "20000.10", fees: "10.05" },
+      { type: "FEE", amount: "99.95" },
+    ]);
+    expect(bal.toString()).toBe("38907.4");
+  });
+
+  it("0.1 + 0.2 style floats never corrupt the balance", () => {
+    const bal = cashBalance([
+      { type: "DEPOSIT", amount: "0.1" },
+      { type: "DEPOSIT", amount: "0.2" },
+    ]);
+    expect(bal.toString()).toBe("0.3");
   });
 });

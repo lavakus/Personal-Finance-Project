@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/** Sidebar per brief §69. Phase 1 ships the full navigation skeleton;
- *  sections land page-by-page across phases (disabled ones say so). */
+/** Sidebar per brief §69. The full navigation skeleton ships up front;
+ *  sections unlock as their phase lands (disabled ones say so). */
+const LIVE_PHASE = 2;
+
 const NAV: Array<{ group: string; items: Array<{ label: string; href: string; phase?: number }> }> = [
   { group: "", items: [{ label: "Dashboard", href: "/dashboard" }] },
   {
@@ -87,7 +89,7 @@ export function Sidebar({ demoMode }: { demoMode: boolean }) {
             ) : null}
             {section.items.map((item) => {
               const active = pathname?.startsWith(item.href);
-              const pending = item.phase !== undefined && item.phase > 1;
+              const pending = item.phase !== undefined && item.phase > LIVE_PHASE;
               return (
                 <Link
                   key={item.href}

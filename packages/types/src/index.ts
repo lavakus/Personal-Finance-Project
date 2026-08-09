@@ -124,19 +124,105 @@ export const AssetSchema = z.object({
 });
 export type Asset = z.infer<typeof AssetSchema>;
 
-export const TransactionInputSchema = z.object({
-  accountId: z.string().uuid(),
-  assetId: z.string().uuid().nullable(),
-  type: TransactionType,
-  quantity: decimalString.nullable(),
-  price: decimalString.nullable(),
-  amount: decimalString,
-  currency: Currency,
-  fees: decimalString.default("0"),
-  executedAt: z.string(),
-  notes: z.string().max(2000).optional(),
-});
+export const TransactionInputSchema = z
+  .object({
+    accountId: z.string().uuid(),
+    assetId: z.string().uuid().nullable().default(null),
+    type: TransactionType,
+    quantity: decimalString.nullable().default(null),
+    price: decimalString.nullable().default(null),
+    // For BUY/SELL the server derives amount = quantity × price (decimal);
+    // for cash types the client supplies it.
+    amount: decimalString.optional(),
+    currency: Currency,
+    fees: decimalString.default("0"),
+    executedAt: z.string(),
+    notes: z.string().max(2000).optional(),
+  })
+  .superRefine((t, ctx) => {
+    const isTrade = t.type === "BUY" || t.type === "SELL";
+    if (isTrade && (!t.quantity || !t.price)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${t.type} requires quantity and price`,
+      });
+    }
+    if (["BUY", "SELL", "DIVIDEND"].includes(t.type) && !t.assetId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${t.type} requires an asset`,
+      });
+    }
+    if (!isTrade && !t.amount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${t.type} requires an amount`,
+      });
+    }
+  });
 export type TransactionInput = z.infer<typeof TransactionInputSchema>;
+
+export const PortfolioAccountSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(80),
+  currency: Currency,
+  isDefault: z.boolean(),
+});
+export type PortfolioAccount = z.infer<typeof PortfolioAccountSchema>;
+
+export const AccountInputSchema = z.object({
+  name: z.string().min(1).max(80),
+  currency: Currency.default("INR"),
+});
+export type AccountInput = z.infer<typeof AccountInputSchema>;
+
+// A derived holding — computed from the transaction ledger, never stored.
+// Price fields are null until market data exists (no fabrication, brief §90).
+export const HoldingSchema = z.object({
+  assetId: z.string().uuid(),
+  symbol: z.string(),
+  name: z.string(),
+  assetClass: AssetClass,
+  currency: Currency,
+  quantity: decimalString,
+  averageCost: decimalString,
+  investedValue: decimalString,
+  realizedPnl: decimalString,
+  currentPrice: decimalString.nullable(),
+  currentValue: decimalString.nullable(),
+  unrealizedPnl: decimalString.nullable(),
+  returnPct: decimalString.nullable(),
+  allocationPct: decimalString.nullable(),
+  priceFreshness: DataFreshness,
+});
+export type Holding = z.infer<typeof HoldingSchema>;
+
+export const PortfolioSummarySchema = z.object({
+  invested: decimalString,
+  currentValue: decimalString.nullable(),
+  realizedPnl: decimalString,
+  unrealizedPnl: decimalString.nullable(),
+  returnPct: decimalString.nullable(),
+  cashByAccount: z.array(
+    z.object({
+      accountId: z.string().uuid(),
+      accountName: z.string(),
+      currency: Currency,
+      balance: decimalString,
+    })
+  ),
+  holdings: z.array(HoldingSchema),
+  asOf: z.string(),
+});
+export type PortfolioSummary = z.infer<typeof PortfolioSummarySchema>;
+
+export const AssetInputSchema = z.object({
+  symbol: z.string().min(1).max(32).transform((s) => s.toUpperCase().trim()),
+  name: z.string().min(1).max(120),
+  assetClass: AssetClass,
+  currency: Currency.default("INR"),
+});
+export type AssetInput = z.infer<typeof AssetInputSchema>;
 
 export const TradeInputSchema = z.object({
   symbol: z.string().min(1),

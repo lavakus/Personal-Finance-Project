@@ -48,6 +48,20 @@ export const demoSetups = [
   },
 ];
 
+export const demoHoldings = [
+  { symbol: "RELIANCE", name: "Reliance Industries", assetClass: "EQUITY_IN", qty: "40", avg: "1352.40", invested: "54096.00", realized: "2140.00" },
+  { symbol: "TATAMOTORS", name: "Tata Motors", assetClass: "EQUITY_IN", qty: "120", avg: "688.15", invested: "82578.00", realized: "0" },
+  { symbol: "BTC", name: "Bitcoin", assetClass: "CRYPTO", qty: "0.05", avg: "97250.00", invested: "4862.50", realized: "312.75" },
+  { symbol: "GOLD", name: "Gold (grams)", assetClass: "GOLD", qty: "25", avg: "7120.00", invested: "178000.00", realized: "0" },
+];
+
+export const demoTransactions = [
+  { date: "2026-08-05", type: "BUY", symbol: "RELIANCE", qty: "10", price: "1361.20", amount: "13612.00", fees: "18.40" },
+  { date: "2026-08-01", type: "DIVIDEND", symbol: "TATAMOTORS", qty: null, price: null, amount: "720.00", fees: "0" },
+  { date: "2026-07-28", type: "DEPOSIT", symbol: null, qty: null, price: null, amount: "50000.00", fees: "0" },
+  { date: "2026-07-21", type: "SELL", symbol: "BTC", qty: "0.01", price: "118900.00", amount: "1189.00", fees: "2.97" },
+];
+
 export const demoActiveTrades = [
   { symbol: "TATAMOTORS", direction: "LONG", pnl: "+4,120", r: "+0.8", status: "ACTIVE" },
   { symbol: "HDFCBANK", direction: "LONG", pnl: "-1,050", r: "-0.3", status: "ACTIVE" },

@@ -134,6 +134,38 @@ export function returnPct(invested: Dec, currentValue: Dec): Decimal {
   return d(currentValue).minus(inv).div(inv).times(100);
 }
 
+// ───────────────────────────────────────────────── cash ledger (§11)
+// Signed cash impact of a transaction on its account. Convention:
+// `amount` is always the gross positive value; direction comes from type.
+// TRANSFER is the outgoing side — the receiving account records DEPOSIT.
+
+export type CashTxnType =
+  | "BUY" | "SELL" | "DEPOSIT" | "WITHDRAWAL" | "DIVIDEND" | "FEE" | "TRANSFER";
+
+export function cashDelta(txn: {
+  type: CashTxnType;
+  amount: Dec;
+  fees?: Dec;
+}): Decimal {
+  const amount = d(txn.amount);
+  const fees = d(txn.fees ?? 0);
+  switch (txn.type) {
+    case "DEPOSIT":    return amount;
+    case "WITHDRAWAL": return amount.neg();
+    case "BUY":        return amount.plus(fees).neg();
+    case "SELL":       return amount.minus(fees);
+    case "DIVIDEND":   return amount.minus(fees);
+    case "FEE":        return amount.neg();
+    case "TRANSFER":   return amount.plus(fees).neg();
+  }
+}
+
+export function cashBalance(
+  txns: Array<{ type: CashTxnType; amount: Dec; fees?: Dec }>
+): Decimal {
+  return txns.reduce((acc, t) => acc.plus(cashDelta(t)), d(0));
+}
+
 // ─────────────────────────────────────────────────────── CAGR (§13)
 
 export function cagr(params: {
