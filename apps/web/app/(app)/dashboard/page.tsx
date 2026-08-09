@@ -8,6 +8,7 @@ import {
   demoRegime,
   demoSetups,
 } from "@/lib/demo-data";
+import { getIndexQuotes, type QuoteRow } from "@/lib/data/market";
 import { getPortfolioSummary, isMigrationPending } from "@/lib/data/portfolio";
 import { getTrades, type TradeComputed } from "@/lib/data/trades";
 import { isDemoMode } from "@/lib/env";
@@ -26,6 +27,7 @@ export default async function DashboardPage() {
 
   let live = null;
   let liveTrades: TradeComputed[] | null = null;
+  let liveQuotes: QuoteRow[] | null = null;
   let migrationNotice = false;
   if (!isDemoMode) {
     const sb = await createServerSupabase();
@@ -42,6 +44,12 @@ export default async function DashboardPage() {
     } catch (e) {
       if (!isMigrationPending(e)) throw e;
       // 0003 pending — trades card falls back to its placeholder
+    }
+    try {
+      liveQuotes = await getIndexQuotes(sb);
+    } catch (e) {
+      if (!isMigrationPending(e)) throw e;
+      // 0004 pending — markets card falls back to its placeholder
     }
   }
 
@@ -121,10 +129,37 @@ export default async function DashboardPage() {
         )}
       </Card>
 
-      {/* market overview */}
+      {/* market overview — live cached quotes since P4 */}
       <Card title="Markets" className="col-span-12 xl:col-span-7"
             action={isDemoMode ? <Badge tone="demo">demo</Badge> : undefined}>
-        {isDemoMode ? (
+        {!isDemoMode ? (
+          liveQuotes === null ? (
+            <PhasePending phase={4} what="Index quotes (migration 0004 pending)" />
+          ) : liveQuotes.length === 0 ? (
+            <p className="py-4 text-center text-[13px] text-(--color-text-faint)">
+              No quotes cached yet — run the market-data refresh from Settings.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+              {liveQuotes.map((q) => (
+                <div key={q.index_code}>
+                  <div className="text-[10px] uppercase tracking-wider text-(--color-text-faint)">
+                    {q.market_indices?.name ?? q.index_code}
+                  </div>
+                  <div className="num mt-0.5 text-sm font-semibold">
+                    {Number(q.price).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <PnL value={Number(q.change_pct)} suffix="%" />
+                    <Badge tone={q.freshness === "RECENT" ? "gain" : "warn"}>
+                      {q.freshness.slice(0, 3)}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : isDemoMode ? (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
               {demoMarkets.map((m) => (
@@ -149,9 +184,7 @@ export default async function DashboardPage() {
               </span>
             </div>
           </>
-        ) : (
-          <PhasePending phase={4} what="Live index, crypto and gold quotes" />
-        )}
+        ) : null}
       </Card>
 
       {/* top setups */}

@@ -3,8 +3,11 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  allocationPct,
   cashBalance,
   d,
+  returnPct,
+  unrealizedPnl,
   walkLedger,
   type CashTxnType,
   type LedgerLot,
@@ -16,6 +19,35 @@ import type {
   PortfolioAccount,
   PortfolioSummary,
 } from "@tradeos/types";
+
+import { effectiveFreshness, getAssetQuotes, type AssetQuote } from "./market";
+
+const GRAMS_PER_TROY_OUNCE = "31.1034768";
+
+/**
+ * Convert a provider quote to INR for valuation. Explicit, documented
+ * conversions only — anything unmappable stays unpriced (brief §90):
+ *  - EQUITY_IN: already INR
+ *  - CRYPTO: USD quote × USD/INR
+ *  - GOLD: COMEX USD/troy-oz → INR per gram (assumes gold quantity is grams)
+ */
+export function quoteToINR(params: {
+  assetClass: AssetClass;
+  quotePrice: string;
+  usdInr: string | null;
+}): ReturnType<typeof d> | null {
+  const { assetClass, quotePrice, usdInr } = params;
+  if (assetClass === "EQUITY_IN") return d(quotePrice);
+  if (assetClass === "CRYPTO") {
+    return usdInr ? d(quotePrice).times(d(usdInr)) : null;
+  }
+  if (assetClass === "GOLD") {
+    return usdInr
+      ? d(quotePrice).div(d(GRAMS_PER_TROY_OUNCE)).times(d(usdInr))
+      : null;
+  }
+  return null;
+}
 
 /**
  * Portfolio read model (brief §10–11). Holdings are DERIVED here from the
@@ -85,7 +117,8 @@ export async function getTransactions(
 
 export function computePortfolio(
   accounts: PortfolioAccount[],
-  txns: TransactionRow[]
+  txns: TransactionRow[],
+  pricing?: { quotes: Map<string, AssetQuote>; usdInr: string | null }
 ): PortfolioSummary {
   // holdings: walk BUY/SELL per asset in executed_at order
   const byAsset = new Map<string, TransactionRow[]>();
@@ -113,26 +146,59 @@ export function computePortfolio(
     realized = realized.plus(state.realizedPnl);
     const meta = list[0]?.assets ?? null;
     if (state.quantity.isZero() && state.realizedPnl.isZero()) continue;
+
+    // valuation from the quote cache — absent quote = UNAVAILABLE, never a guess
+    const assetClass = meta?.asset_class ?? "OTHER";
+    const quote = pricing?.quotes.get(assetId);
+    const priceINR =
+      quote && !state.quantity.isZero()
+        ? quoteToINR({
+            assetClass,
+            quotePrice: quote.price,
+            usdInr: pricing?.usdInr ?? null,
+          })
+        : null;
+    const currentValue = priceINR ? state.quantity.times(priceINR) : null;
+
     holdings.push({
       assetId,
       symbol: meta?.symbol ?? "?",
       name: meta?.name ?? "Unknown asset",
-      assetClass: meta?.asset_class ?? "OTHER",
+      assetClass,
       currency: meta?.currency ?? "INR",
       quantity: state.quantity.toString(),
       averageCost: state.averageCost.toString(),
       investedValue: state.investedValue.toString(),
       realizedPnl: state.realizedPnl.toString(),
-      // Phase 4 wires prices; until then: unavailable, never fabricated.
-      currentPrice: null,
-      currentValue: null,
-      unrealizedPnl: null,
-      returnPct: null,
-      allocationPct: null,
-      priceFreshness: "UNAVAILABLE",
+      currentPrice: priceINR ? priceINR.toDecimalPlaces(2).toString() : null,
+      currentValue: currentValue ? currentValue.toDecimalPlaces(2).toString() : null,
+      unrealizedPnl: priceINR
+        ? unrealizedPnl(state, priceINR).toDecimalPlaces(2).toString()
+        : null,
+      returnPct:
+        currentValue && !state.investedValue.isZero()
+          ? returnPct(state.investedValue, currentValue).toDecimalPlaces(2).toString()
+          : null,
+      allocationPct: null, // filled below once the priced total is known
+      priceFreshness: quote ? effectiveFreshness(quote) : "UNAVAILABLE",
     });
   }
   holdings.sort((a, b) => Number(d(b.investedValue).minus(a.investedValue)));
+
+  // allocation over priced holdings (brief §10)
+  const pricedTotal = holdings.reduce(
+    (a, h) => (h.currentValue ? a.plus(d(h.currentValue)) : a),
+    d(0)
+  );
+  if (!pricedTotal.isZero()) {
+    for (const h of holdings) {
+      if (h.currentValue) {
+        h.allocationPct = allocationPct(h.currentValue, pricedTotal)
+          .toDecimalPlaces(2)
+          .toString();
+      }
+    }
+  }
 
   // cash per account from the full ledger
   const cashByAccount = accounts.map((acc) => {
@@ -147,12 +213,30 @@ export function computePortfolio(
     };
   });
 
+  // totals: only meaningful when EVERY open holding has a price — partial
+  // sums are shown per-holding, never presented as "the" portfolio value.
+  const openHoldings = holdings.filter((h) => !d(h.quantity).isZero());
+  const allPriced =
+    openHoldings.length > 0 && openHoldings.every((h) => h.currentValue !== null);
+  const investedOpen = openHoldings.reduce((a, h) => a.plus(d(h.investedValue)), d(0));
+  const currentTotal = allPriced
+    ? openHoldings.reduce((a, h) => a.plus(d(h.currentValue as string)), d(0))
+    : null;
+  const unrealizedTotal = allPriced
+    ? openHoldings.reduce((a, h) => a.plus(d(h.unrealizedPnl as string)), d(0))
+    : null;
+
   return {
     invested: invested.toString(),
-    currentValue: null,
+    currentValue: currentTotal ? currentTotal.toDecimalPlaces(2).toString() : null,
     realizedPnl: realized.toString(),
-    unrealizedPnl: null,
-    returnPct: null,
+    unrealizedPnl: unrealizedTotal
+      ? unrealizedTotal.toDecimalPlaces(2).toString()
+      : null,
+    returnPct:
+      currentTotal && !investedOpen.isZero()
+        ? returnPct(investedOpen, currentTotal).toDecimalPlaces(2).toString()
+        : null,
     cashByAccount,
     holdings,
     asOf: new Date().toISOString(),
@@ -166,7 +250,26 @@ export async function getPortfolioSummary(
     getAccounts(sb),
     getTransactions(sb),
   ]);
-  return computePortfolio(accounts, txns);
+
+  // quote cache lookups (never a provider call in the request path)
+  let pricing: { quotes: Map<string, AssetQuote>; usdInr: string | null } | undefined;
+  try {
+    const assetIds = [
+      ...new Set(txns.filter((t) => t.asset_id).map((t) => t.asset_id as string)),
+    ];
+    const quotes = await getAssetQuotes(sb, assetIds);
+    const { data: fx } = await sb
+      .from("market_quotes")
+      .select("price")
+      .eq("index_code", "USDINR")
+      .maybeSingle();
+    pricing = { quotes, usdInr: fx ? String(fx.price) : null };
+  } catch {
+    // market_quotes missing (0004 pending) — valuation stays UNAVAILABLE
+    pricing = undefined;
+  }
+
+  return computePortfolio(accounts, txns, pricing);
 }
 
 /** True when the error is Postgres "relation does not exist" — i.e. the

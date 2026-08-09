@@ -137,8 +137,16 @@ function HoldingsTable({
     averageCost: string;
     investedValue: string;
     realizedPnl: string;
+    currentPrice?: string | null;
+    currentValue?: string | null;
+    unrealizedPnl?: string | null;
+    returnPct?: string | null;
+    allocationPct?: string | null;
+    priceFreshness?: string;
   }>;
 }) {
+  const freshTone = (f?: string) =>
+    f === "RECENT" ? ("gain" as const) : f === "STALE" ? ("warn" as const) : ("neutral" as const);
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-[13px]">
@@ -149,8 +157,11 @@ function HoldingsTable({
             <th className="pb-2 text-right font-medium">Qty</th>
             <th className="pb-2 text-right font-medium">Avg cost</th>
             <th className="pb-2 text-right font-medium">Invested</th>
-            <th className="pb-2 text-right font-medium">Realized P&L</th>
-            <th className="pb-2 text-right font-medium">Current / Unrealized</th>
+            <th className="pb-2 text-right font-medium">Price (INR)</th>
+            <th className="pb-2 text-right font-medium">Value</th>
+            <th className="pb-2 text-right font-medium">Unrealized</th>
+            <th className="pb-2 text-right font-medium">Realized</th>
+            <th className="pb-2 text-right font-medium">Alloc</th>
           </tr>
         </thead>
         <tbody>
@@ -167,15 +178,51 @@ function HoldingsTable({
               <td className="num text-right">{Number(h.averageCost).toLocaleString("en-IN")}</td>
               <td className="num text-right">{Number(h.investedValue).toLocaleString("en-IN")}</td>
               <td className="num text-right">
+                {h.currentPrice ? (
+                  <div>
+                    {Number(h.currentPrice).toLocaleString("en-IN")}
+                    <div>
+                      <Badge tone={freshTone(h.priceFreshness)}>
+                        {(h.priceFreshness ?? "UNAVAILABLE").slice(0, 5)}
+                      </Badge>
+                    </div>
+                  </div>
+                ) : (
+                  <Badge tone="neutral">unavailable</Badge>
+                )}
+              </td>
+              <td className="num text-right">
+                {h.currentValue ? Number(h.currentValue).toLocaleString("en-IN") : "—"}
+              </td>
+              <td className="num text-right">
+                {h.unrealizedPnl ? (
+                  <div>
+                    <PnL value={Number(h.unrealizedPnl)} />
+                    {h.returnPct ? (
+                      <div className="text-[11px]">
+                        <PnL value={Number(h.returnPct)} suffix="%" />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  "—"
+                )}
+              </td>
+              <td className="num text-right">
                 <PnL value={Number(h.realizedPnl)} />
               </td>
-              <td className="text-right">
-                <Badge tone="neutral">unavailable</Badge>
+              <td className="num text-right">
+                {h.allocationPct ? `${h.allocationPct}%` : "—"}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      <p className="mt-3 text-[11px] text-(--color-text-faint)">
+        INR valuation: Indian equity direct; crypto USD × USD/INR; gold COMEX
+        per-gram × USD/INR (assumes gold quantity in grams). Unpriced assets
+        stay UNAVAILABLE — values are never estimated.
+      </p>
     </div>
   );
 }
