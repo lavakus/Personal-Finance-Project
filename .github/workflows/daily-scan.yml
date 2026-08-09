@@ -25,6 +25,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: uv run python -m swingscan.publish
+      - name: Evaluate historical signals
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: uv run python -m swingscan.evaluate
       - name: Save text report artifact
         if: always()
         run: uv run swingscan scan || true

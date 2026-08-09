@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 /** Sidebar per brief §69. The full navigation skeleton ships up front;
  *  sections unlock as their phase lands (disabled ones say so). */
-const LIVE_PHASE = 9;
+const LIVE_PHASE = 12;
 
 const NAV: Array<{ group: string; items: Array<{ label: string; href: string; phase?: number }> }> = [
   { group: "", items: [{ label: "Dashboard", href: "/dashboard" }] },
@@ -32,6 +32,7 @@ const NAV: Array<{ group: string; items: Array<{ label: string; href: string; ph
       { label: "Screener", href: "/screener", phase: 5 },
       { label: "Stock Research", href: "/research", phase: 5 },
       { label: "Sectors", href: "/sectors", phase: 5 },
+      { label: "AI Analyst", href: "/analyst", phase: 12 },
       { label: "News", href: "/news", phase: 6 },
       { label: "Events", href: "/events", phase: 6 },
       { label: "Earnings", href: "/earnings", phase: 6 },
