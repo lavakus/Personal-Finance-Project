@@ -100,9 +100,24 @@ Configuration is environment-only, so nothing in `config.ini` needs to change
 and the bot behaves exactly as before when the variables are absent:
 
 ```
-TRADEOS_URL       https://<your-deployment>.vercel.app
-TRADEOS_BOT_KEY   tbk_...        # one key per bot — GOLD and BTCUSD differ
+TRADEOS_URL              https://<your-deployment>.vercel.app
+TRADEOS_BOT_KEY_GOLD     tbk_...
+TRADEOS_BOT_KEY_BTCUSD   tbk_...
+TRADEOS_BOT_KEY          tbk_...   # fallback when only one bot runs
 ```
+
+**One key per bot, not per install.** Two instruments running side by side
+from the same code are two bots; sharing a key would merge two strategies into
+a single equity curve and make win rate and profit factor meaningless. The
+sink resolves `TRADEOS_BOT_KEY_<SYMBOL>` first and falls back to the shared
+name.
+
+**Paper/dry-run modes must not report trades.** A bot evaluating signals
+without placing orders has no ticket, fill price or position to report, and
+writing hypothetical fills into `bot_trades` would mix them into the same win
+rate as real ones. Heartbeats and equity still flow, so the bot shows as
+online — only trades are withheld. Live, paper and backtest results stay
+separate (brief rule 13).
 
 The sink also emits its own heartbeat every 15 minutes from the background
 thread, so a quiet session is distinguishable from a dead bot without the
