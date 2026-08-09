@@ -1,0 +1,60 @@
+name: cloud-jobs
+
+# Keeps the deployed app's cached data fresh without needing a PC running:
+# market quotes, RSS news, and the alert engine. Each endpoint authenticates
+# with the CRON_SECRET bearer token and does its own work server-side.
+#
+# Required repo secrets:
+#   APP_URL      e.g. https://personal-finance-project-web-sqdm.vercel.app
+#   CRON_SECRET  same value as the CRON_SECRET env var in Vercel
+#
+# The daily swingscan run lives in daily-scan.yml — that one needs the full
+# Python engine, so it runs on the Actions runner rather than calling the app.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # NSE trades 09:15–15:30 IST (03:45–10:00 UTC). Refresh mid-morning,
+    # midday, and just after the close on weekdays.
+    - cron: "30 4 * * 1-5"     # 10:00 IST
+    - cron: "0 7 * * 1-5"      # 12:30 IST
+    - cron: "15 10 * * 1-5"    # 15:45 IST
+    # Crypto and global markets keep moving — one evening run every day.
+    - cron: "0 13 * * *"       # 18:30 IST
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Refresh market data
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS --fail-with-body --max-time 300 \
+            -X POST "$APP_URL/api/jobs/market-data" \
+            -H "Authorization: Bearer $CRON_SECRET"
+          echo
+
+      - name: Refresh news
+        if: always()
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS --fail-with-body --max-time 300 \
+            -X POST "$APP_URL/api/jobs/news" \
+            -H "Authorization: Bearer $CRON_SECRET"
+          echo
+
+      - name: Run alert engine
+        if: always()
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS --fail-with-body --max-time 300 \
+            -X POST "$APP_URL/api/jobs/alerts" \
+            -H "Authorization: Bearer $CRON_SECRET"
+          echo
