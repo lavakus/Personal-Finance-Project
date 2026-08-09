@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     "@tradeos/types",
     "@tradeos/calculations",
     "@tradeos/market-data",
+    "@tradeos/news",
   ],
 };
 

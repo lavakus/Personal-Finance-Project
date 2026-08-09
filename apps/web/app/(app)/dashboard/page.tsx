@@ -40,6 +40,19 @@ export default async function DashboardPage() {
   let liveRegime: RegimeRow | null = null;
   let scanReady = false;
   let migrationNotice = false;
+  let liveNews: Array<{
+    id: string;
+    headline: string;
+    url: string;
+    sentiment: string;
+    impact: string;
+  }> | null = null;
+  let liveEvents: Array<{
+    id: string;
+    symbol: string;
+    event_type: string;
+    event_date: string;
+  }> | null = null;
   if (!isDemoMode) {
     const sb = await createServerSupabase();
     try {
@@ -72,6 +85,23 @@ export default async function DashboardPage() {
       if (!isMigrationPending(e)) throw e;
       // 0005 pending — setups card falls back to its placeholder
     }
+    const [newsRes, eventsRes] = await Promise.all([
+      sb
+        .from("news_articles")
+        .select("id, headline, url, sentiment, impact")
+        .in("impact", ["HIGH", "MEDIUM"])
+        .order("published_at", { ascending: false })
+        .limit(6),
+      sb
+        .from("corporate_events")
+        .select("id, symbol, event_type, event_date")
+        .gte("event_date", new Date().toISOString().slice(0, 10))
+        .order("event_date")
+        .limit(6),
+    ]);
+    // errors here mean 0006 is pending — cards fall back to placeholders
+    if (!newsRes.error) liveNews = newsRes.data;
+    if (!eventsRes.error) liveEvents = eventsRes.data;
   }
 
   return (
@@ -379,11 +409,31 @@ export default async function DashboardPage() {
         )}
       </Card>
 
-      {/* news */}
+      {/* news — live since P6 */}
       <Card title="Important news" className="col-span-12 md:col-span-6 xl:col-span-4"
             action={isDemoMode ? <Badge tone="demo">demo</Badge> : undefined}>
         {!isDemoMode ? (
-          <PhasePending phase={6} what="News with sentiment and stock mapping" />
+          liveNews === null ? (
+            <PhasePending phase={6} what="News (migration 0006 pending)" />
+          ) : liveNews.length === 0 ? (
+            <p className="py-4 text-center text-[13px] text-(--color-text-faint)">
+              No high-impact news cached — refresh from Settings.
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {liveNews.map((n) => (
+                <li key={n.id} className="flex items-start justify-between gap-3">
+                  <a href={n.url} target="_blank" rel="noopener noreferrer"
+                     className="text-[13px] leading-snug hover:text-(--color-accent)">
+                    {n.headline}
+                  </a>
+                  <Badge tone={n.sentiment === "POSITIVE" ? "gain" : n.sentiment === "NEGATIVE" ? "loss" : "neutral"}>
+                    {n.sentiment.slice(0, 3)}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )
         ) : (
         <ul className="space-y-2.5">
           {demoNews.map((n) => (
@@ -398,11 +448,37 @@ export default async function DashboardPage() {
         )}
       </Card>
 
-      {/* events */}
+      {/* events — live since P6 */}
       <Card title="Upcoming events" className="col-span-12 md:col-span-6 xl:col-span-4"
             action={isDemoMode ? <Badge tone="demo">demo</Badge> : undefined}>
         {!isDemoMode ? (
-          <PhasePending phase={6} what="Corporate events and earnings risk" />
+          liveEvents === null ? (
+            <PhasePending phase={6} what="Events (migration 0006 pending)" />
+          ) : liveEvents.length === 0 ? (
+            <p className="py-4 text-center text-[13px] text-(--color-text-faint)">
+              No upcoming events recorded — add them on the Events page.
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {liveEvents.map((e) => {
+                const d = Math.round(
+                  (new Date(e.event_date).getTime() - Date.now()) / 86400000
+                );
+                return (
+                  <li key={e.id} className="flex items-center justify-between">
+                    <div>
+                      <span className="font-semibold">{e.symbol}</span>
+                      <span className="ml-2 text-(--color-text-dim)">{e.event_type}</span>
+                      <span className="ml-2 text-xs text-(--color-text-faint)">{e.event_date}</span>
+                    </div>
+                    <Badge tone={d <= 2 ? "warn" : "neutral"}>
+                      {d <= 2 ? "HIGH" : `${d}d`}
+                    </Badge>
+                  </li>
+                );
+              })}
+            </ul>
+          )
         ) : (
         <ul className="space-y-2.5">
           {demoEvents.map((e) => (

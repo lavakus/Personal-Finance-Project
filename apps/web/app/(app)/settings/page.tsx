@@ -2,7 +2,7 @@ import { Badge, Card } from "@/components/ui";
 import { isDemoMode } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 
-import { RefreshMarketData } from "./refresh-button";
+import { RefreshMarketData, RefreshNews } from "./refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +91,14 @@ export default async function SettingsPage() {
             delayed data, labeled RECENT at best, never LIVE).
           </p>
           <RefreshMarketData />
+          <div className="mt-3 border-t border-(--color-border) pt-3">
+            <p className="mb-3 text-[13px] text-(--color-text-dim)">
+              Pull the latest headlines from official RSS feeds (ET Markets,
+              Moneycontrol, Mint, CoinDesk) with heuristic sentiment tags and
+              automatic stock mapping.
+            </p>
+            <RefreshNews />
+          </div>
         </Card>
       ) : null}
 
