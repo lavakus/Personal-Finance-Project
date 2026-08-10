@@ -1,8 +1,8 @@
 import { Sidebar } from "@/components/sidebar";
-import { Badge } from "@/components/ui";
+import { Topbar } from "@/components/topbar";
+import { demoProfile } from "@/lib/demo-data";
 import { isDemoMode } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { demoProfile } from "@/lib/demo-data";
 
 async function getProfileName(): Promise<string> {
   if (isDemoMode) return demoProfile.displayName;
@@ -26,17 +26,9 @@ export default async function AppLayout({
   return (
     <div className="flex">
       <Sidebar demoMode={isDemoMode} />
-      <div className="flex min-h-screen flex-1 flex-col">
-        <header className="flex h-12 items-center justify-between border-b border-(--color-border) bg-(--color-surface) px-5">
-          <div className="text-xs text-(--color-text-dim)">
-            Data → Analysis → Setup → Plan → <span className="font-semibold text-(--color-text)">your decision</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {isDemoMode ? <Badge tone="demo">Demo data</Badge> : <Badge tone="accent">Connected</Badge>}
-            <span className="text-xs text-(--color-text-dim)">{name}</span>
-          </div>
-        </header>
-        <main className="flex-1 p-5">{children}</main>
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
+        <Topbar name={name} demoMode={isDemoMode} />
+        <main className="mx-auto w-full max-w-[1600px] flex-1 p-5">{children}</main>
       </div>
     </div>
   );
