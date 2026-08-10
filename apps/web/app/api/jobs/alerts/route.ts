@@ -5,6 +5,12 @@ import { createServerSupabase } from "@/lib/supabase/server";
 
 export const maxDuration = 60;
 
+/** A bot silent this long has stopped reporting. */
+const STALE_AFTER_MIN = 60;
+/** ...but only counts as a failure if it was reporting within this window,
+ *  i.e. it was genuinely running and then stopped. */
+const RAN_RECENTLY_MIN = 24 * 60;
+
 /** alert-generation job (brief §85): evaluates PRICE rules against the
  *  quote cache, earnings proximity for held/watched symbols, and stale
  *  bots. One notification per trigger per day (dedupe). */
@@ -149,12 +155,22 @@ export async function POST(req: Request) {
     for (const b of bots ?? []) {
       const ageMin =
         (Date.now() - new Date(b.last_heartbeat_at as string).getTime()) / 60000;
-      if (ageMin > 60) {
+      // Alert on "went quiet while it was working", not "isn't running now".
+      // Session-scheduled bots (trade the session, exit, restart tomorrow) are
+      // legitimately silent overnight and at weekends, so a bare >60min rule
+      // fires every single day for a perfectly healthy bot. Requiring a
+      // heartbeat within the last DAY means the bot demonstrably was running
+      // recently, so a 60-minute gap is a real mid-session death. A bot that
+      // simply hasn't started yet is visible as STALE on the Bots page — it
+      // does not need to wake anyone up.
+      if (ageMin > STALE_AFTER_MIN && ageMin < RAN_RECENTLY_MIN) {
         await notifyOnce({
           userId: b.user_id,
           type: "BOT",
-          title: `Bot "${b.name}" heartbeat stale`,
-          body: `Last heartbeat ${Math.round(ageMin)} minutes ago.`,
+          title: `Bot "${b.name}" stopped mid-session`,
+          body:
+            `Last heartbeat ${Math.round(ageMin)} minutes ago, but it was ` +
+            `reporting earlier today — it likely died rather than finished.`,
         });
       }
     }
