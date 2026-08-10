@@ -7,9 +7,8 @@ export const maxDuration = 60;
 
 /** A bot silent this long has stopped reporting. */
 const STALE_AFTER_MIN = 60;
-/** ...but only counts as a failure if it was reporting within this window,
- *  i.e. it was genuinely running and then stopped. */
-const RAN_RECENTLY_MIN = 24 * 60;
+/** Message prefix a bot sends to announce a deliberate session close. */
+const SESSION_END_MARKER = "session_end";
 
 /** alert-generation job (brief §85): evaluates PRICE rules against the
  *  quote cache, earnings proximity for held/watched symbols, and stale
@@ -155,24 +154,35 @@ export async function POST(req: Request) {
     for (const b of bots ?? []) {
       const ageMin =
         (Date.now() - new Date(b.last_heartbeat_at as string).getTime()) / 60000;
-      // Alert on "went quiet while it was working", not "isn't running now".
-      // Session-scheduled bots (trade the session, exit, restart tomorrow) are
-      // legitimately silent overnight and at weekends, so a bare >60min rule
-      // fires every single day for a perfectly healthy bot. Requiring a
-      // heartbeat within the last DAY means the bot demonstrably was running
-      // recently, so a 60-minute gap is a real mid-session death. A bot that
-      // simply hasn't started yet is visible as STALE on the Bots page — it
-      // does not need to wake anyone up.
-      if (ageMin > STALE_AFTER_MIN && ageMin < RAN_RECENTLY_MIN) {
-        await notifyOnce({
-          userId: b.user_id,
-          type: "BOT",
-          title: `Bot "${b.name}" stopped mid-session`,
-          body:
-            `Last heartbeat ${Math.round(ageMin)} minutes ago, but it was ` +
-            `reporting earlier today — it likely died rather than finished.`,
-        });
-      }
+      if (ageMin <= STALE_AFTER_MIN) continue;
+
+      // Alert on "the loop died", not "it isn't trading right now". Session
+      // scheduled bots trade a session and exit, so they are legitimately
+      // silent overnight and at weekends — a bare age threshold flags a
+      // healthy bot every single day and teaches the user to ignore bot
+      // alerts. Duration alone cannot separate the two cases, so the bot
+      // announces its own clean close and we respect it.
+      const { data: lastEvent } = await admin
+        .from("bot_events")
+        .select("message, event_type")
+        .eq("bot_id", b.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const closedCleanly = (lastEvent?.message ?? "").startsWith(
+        SESSION_END_MARKER
+      );
+      if (closedCleanly) continue;
+
+      await notifyOnce({
+        userId: b.user_id,
+        type: "BOT",
+        title: `Bot "${b.name}" stopped without closing its session`,
+        body:
+          `Last report ${Math.round(ageMin)} minutes ago and it never sent a ` +
+          `session-close, so it likely died rather than finished.`,
+      });
     }
 
     return NextResponse.json({ created });
