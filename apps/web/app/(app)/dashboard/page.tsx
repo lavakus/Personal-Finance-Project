@@ -76,6 +76,14 @@ export default async function DashboardPage() {
     }>;
   }> | null = null;
   let scanError: string | null = null;
+  let livePaper: {
+    name: string;
+    equity: number;
+    capital: number;
+    open: number;
+    maxOpen: number;
+    dataThrough: string | null;
+  } | null = null;
 
   if (!isDemoMode) {
     const sb = await createServerSupabase();
@@ -110,7 +118,7 @@ export default async function DashboardPage() {
       // and the dashboard silently showed a placeholder over live scan data.
       scanError = e instanceof Error ? e.message : String(e);
     }
-    const [newsRes, eventsRes, botsRes] = await Promise.all([
+    const [newsRes, eventsRes, botsRes, paperRes] = await Promise.all([
       sb
         .from("news_articles")
         .select("id, headline, url, sentiment, impact")
@@ -139,6 +147,18 @@ export default async function DashboardPage() {
         .not("bot_trades.status", "eq", "CLOSED")
         .order("created_at")
         .limit(6),
+      // Paper book. Errors (missing table before migration 0010) are tolerated
+      // the same way as the other optional cards: the section just stays hidden
+      // rather than taking the whole dashboard down.
+      sb
+        .from("paper_accounts")
+        .select(
+          `name, starting_capital, equity, max_open, data_through,
+           paper_positions!left (id)`
+        )
+        .not("paper_positions.status", "eq", "CLOSED")
+        .order("created_at")
+        .limit(1),
     ]);
     if (!newsRes.error) liveNews = newsRes.data;
     if (!eventsRes.error) liveEvents = eventsRes.data;
@@ -163,6 +183,25 @@ export default async function DashboardPage() {
           ),
         };
       });
+    }
+    if (!paperRes.error && paperRes.data?.length) {
+      const p = paperRes.data[0] as unknown as {
+        name: string;
+        starting_capital: string;
+        equity: string | null;
+        max_open: number;
+        data_through: string | null;
+        paper_positions: Array<{ id: string }>;
+      };
+      const capital = Number(p.starting_capital);
+      livePaper = {
+        name: p.name,
+        capital,
+        equity: p.equity !== null ? Number(p.equity) : capital,
+        open: (p.paper_positions ?? []).length,
+        maxOpen: p.max_open,
+        dataThrough: p.data_through,
+      };
     }
   }
 
@@ -653,6 +692,48 @@ export default async function DashboardPage() {
             </ul>
           )}
         </Card>
+
+        {/* ── PAPER BOOK ───────────────────────────────────────────────── */}
+        {livePaper ? (
+          <Card
+            title="Paper book"
+            delay={7}
+            action={
+              <Link
+                href="/paper"
+                className="text-[11px] font-medium text-(--color-accent) hover:opacity-80"
+              >
+                Open book →
+              </Link>
+            }
+          >
+            <div className="grid grid-cols-3 gap-3">
+              <Stat
+                label="Value"
+                value={`₹${livePaper.equity.toLocaleString("en-IN", {
+                  maximumFractionDigits: 0,
+                })}`}
+              />
+              <Stat
+                label="Return"
+                value={
+                  <PnL
+                    value={100 * (livePaper.equity / livePaper.capital - 1)}
+                    suffix="%"
+                  />
+                }
+              />
+              <Stat
+                label="Positions"
+                value={`${livePaper.open} / ${livePaper.maxOpen}`}
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-(--color-text-faint)">
+              Simulated on the scanner&apos;s own rules — not real fills.
+              {livePaper.dataThrough ? ` Marked to ${livePaper.dataThrough}.` : null}
+            </p>
+          </Card>
+        ) : null}
       </div>
     </div>
   );
