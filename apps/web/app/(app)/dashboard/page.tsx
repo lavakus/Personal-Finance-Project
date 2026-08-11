@@ -327,6 +327,62 @@ export default async function DashboardPage() {
         )}
       </section>
 
+      {/* ── PAPER BOOK ─────────────────────────────────────────────────────
+          Sits immediately under Total Portfolio on purpose. That card reads ₹0
+          because it tracks positions entered by hand, and the simulated book is
+          the only thing with a live P&L — putting them apart made the page look
+          empty and sent me hunting for a bug twice. */}
+      {livePaper ? (
+        <Card
+          title="Paper book — simulated"
+          delay={1}
+          action={
+            <Link
+              href="/paper"
+              className="text-[11px] font-medium text-(--color-accent) hover:opacity-80"
+            >
+              Open book →
+            </Link>
+          }
+        >
+          <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
+            <Stat
+              size="lg"
+              label="Book value"
+              value={`₹${livePaper.equity.toLocaleString("en-IN", {
+                maximumFractionDigits: 0,
+              })}`}
+            />
+            <Stat
+              size="lg"
+              label="Return"
+              value={
+                <PnL
+                  value={100 * (livePaper.equity / livePaper.capital - 1)}
+                  suffix="%"
+                  arrow
+                />
+              }
+            />
+            <Stat
+              size="lg"
+              label="P&L"
+              value={<PnL value={livePaper.equity - livePaper.capital} />}
+            />
+            <Stat
+              size="lg"
+              label="Positions"
+              value={`${livePaper.open} / ${livePaper.maxOpen}`}
+            />
+          </div>
+          <p className="mt-4 border-t border-(--color-border) pt-3 text-[11px] text-(--color-text-faint)">
+            Simulated on the scanner&apos;s own entry and exit rules with costs
+            charged — not real fills, and kept out of portfolio totals above.
+            {livePaper.dataThrough ? ` Marked to ${livePaper.dataThrough}.` : null}
+          </p>
+        </Card>
+      ) : null}
+
       {/* ── MARKET STRIP ───────────────────────────────────────────────── */}
       <Card title="Markets" delay={1} action={isDemoMode ? <Badge tone="demo">demo</Badge> : undefined}>
         {isDemoMode ? (
@@ -693,47 +749,6 @@ export default async function DashboardPage() {
           )}
         </Card>
 
-        {/* ── PAPER BOOK ───────────────────────────────────────────────── */}
-        {livePaper ? (
-          <Card
-            title="Paper book"
-            delay={7}
-            action={
-              <Link
-                href="/paper"
-                className="text-[11px] font-medium text-(--color-accent) hover:opacity-80"
-              >
-                Open book →
-              </Link>
-            }
-          >
-            <div className="grid grid-cols-3 gap-3">
-              <Stat
-                label="Value"
-                value={`₹${livePaper.equity.toLocaleString("en-IN", {
-                  maximumFractionDigits: 0,
-                })}`}
-              />
-              <Stat
-                label="Return"
-                value={
-                  <PnL
-                    value={100 * (livePaper.equity / livePaper.capital - 1)}
-                    suffix="%"
-                  />
-                }
-              />
-              <Stat
-                label="Positions"
-                value={`${livePaper.open} / ${livePaper.maxOpen}`}
-              />
-            </div>
-            <p className="mt-2 text-[11px] text-(--color-text-faint)">
-              Simulated on the scanner&apos;s own rules — not real fills.
-              {livePaper.dataThrough ? ` Marked to ${livePaper.dataThrough}.` : null}
-            </p>
-          </Card>
-        ) : null}
       </div>
     </div>
   );
