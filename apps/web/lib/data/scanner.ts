@@ -34,7 +34,7 @@ export interface StockRankingRow {
   sector_rank: number | null;
   price: string;
   atr: string | null;
-  setup_type: "PULLBACK" | "BREAKOUT";
+  setup_type: "PULLBACK" | "BREAKOUT" | "MOMENTUM";
   score_total: string;
   score_tier: string;
   score_components: Record<string, number>;
@@ -42,6 +42,11 @@ export interface StockRankingRow {
   why: string[];
   warnings: string[];
   rs_excess_nifty_20d: string | null;
+  /** Factor-engine fields; null for the timing engine. */
+  weight_pct: string | null;
+  momentum_pct: string | null;
+  vol_annual_pct: string | null;
+  hold_until: string | null;
   trade_plans: TradePlanRow | null;
 }
 
@@ -60,29 +65,52 @@ export interface ScanRunRow {
   stock_rankings: StockRankingRow[];
 }
 
-export async function getLatestScan(
-  sb: SupabaseClient
+/** Selection engines that publish into scan_runs. Reads MUST filter by engine:
+ *  the swing screener and the momentum core share these tables, so an
+ *  unfiltered "latest run" would show whichever published most recently. */
+export const ENGINE_SWING = "swingscan";
+export const ENGINE_MOMENTUM = "momentum";
+
+const RUN_SELECT = `id, run_date, engine, engine_version, universe, regime_label,
+   regime_score, funnel, no_trade, no_trade_reason, near_misses,
+   stock_rankings (
+     id, rank, symbol, name, sector, sector_rank, price, atr, setup_type,
+     score_total, score_tier, score_components, score_weights, why,
+     warnings, rs_excess_nifty_20d, weight_pct, momentum_pct,
+     vol_annual_pct, hold_until,
+     trade_plans (*)
+   )`;
+
+async function latestRunFor(
+  sb: SupabaseClient,
+  engine: string
 ): Promise<ScanRunRow | null> {
   const { data, error } = await sb
     .from("scan_runs")
-    .select(
-      `id, run_date, engine, engine_version, universe, regime_label,
-       regime_score, funnel, no_trade, no_trade_reason, near_misses,
-       stock_rankings (
-         id, rank, symbol, name, sector, sector_rank, price, atr, setup_type,
-         score_total, score_tier, score_components, score_weights, why,
-         warnings, rs_excess_nifty_20d,
-         trade_plans (*)
-       )`
-    )
+    .select(RUN_SELECT)
+    .eq("engine", engine)
     .order("run_date", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error) throw new Error(`scan: ${error.message}`);
+  if (error) throw new Error(`scan(${engine}): ${error.message}`);
   if (!data) return null;
   const run = data as unknown as ScanRunRow;
   run.stock_rankings.sort((a, b) => a.rank - b.rank);
   return run;
+}
+
+/** Latest swing-scanner run (pullback/breakout timing engine). */
+export async function getLatestScan(
+  sb: SupabaseClient
+): Promise<ScanRunRow | null> {
+  return latestRunFor(sb, ENGINE_SWING);
+}
+
+/** Latest momentum-core rebalance (cross-sectional factor engine). */
+export async function getLatestMomentum(
+  sb: SupabaseClient
+): Promise<ScanRunRow | null> {
+  return latestRunFor(sb, ENGINE_MOMENTUM);
 }
 
 export interface SectorRankingRow {

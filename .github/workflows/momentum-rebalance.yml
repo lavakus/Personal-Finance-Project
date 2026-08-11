@@ -1,0 +1,45 @@
+name: momentum-rebalance
+
+# Cross-sectional 12-1 momentum core. Unlike daily-scan this is a *quarterly*
+# strategy: it ranks the universe and holds the top 10 for ~3 months, so it only
+# needs to run at each rebalance. Running it more often would not change the
+# book, just churn it.
+#
+# Fires on the 1st of Feb/May/Aug/Nov after the NSE close, and can always be
+# triggered by hand (use the dry-run input to preview a book without writing).
+#
+# Requires repo secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the book without writing to Supabase"
+        type: boolean
+        default: false
+      top_n:
+        description: "Number of names to hold"
+        default: "10"
+  schedule:
+    - cron: "45 10 1 2,5,8,11 *"   # 16:15 IST on the 1st of the rebalance months
+
+jobs:
+  rebalance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+
+      - name: Rebalance and publish
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          uv run python -m swingscan.publish_factor \
+            --top-n "${{ github.event.inputs.top_n || '10' }}" \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Walk-forward validation (recorded on every rebalance)
+        run: uv run python -m swingscan.factor_validate --folds 3 || true

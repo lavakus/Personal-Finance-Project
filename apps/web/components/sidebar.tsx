@@ -23,6 +23,7 @@ import {
   Settings,
   Sparkles,
   Star,
+  TrendingUp,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -61,6 +62,7 @@ const NAV: Array<{ group: string; items: Item[] }> = [
     group: "Intelligence",
     items: [
       { label: "Screener", href: "/screener", icon: Search, phase: 5 },
+      { label: "Momentum core", href: "/momentum", icon: TrendingUp, phase: 5 },
       { label: "Stock Research", href: "/research", icon: Activity, phase: 5 },
       { label: "Sectors", href: "/sectors", icon: Layers, phase: 5 },
       { label: "AI Analyst", href: "/analyst", icon: Sparkles, phase: 12 },

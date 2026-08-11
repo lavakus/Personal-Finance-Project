@@ -16,6 +16,7 @@ const TITLES: Array<[string, string]> = [
   ["/markets/gold", "Gold"],
   ["/markets/global", "Global markets"],
   ["/screener", "Screener"],
+  ["/momentum", "Momentum core"],
   ["/research", "Stock research"],
   ["/sectors", "Sector rotation"],
   ["/analyst", "AI analyst"],
