@@ -151,8 +151,15 @@ def main() -> int:
         "unrealized": _num(p.unrealized),
     } for p in res.open_positions]
 
-    sb.upsert("paper_positions", closed_rows + open_rows,
-              on_conflict="account_id,symbol,entry_date")
+    # PostgREST rejects a bulk upsert whose objects have differing key sets
+    # ("All object keys must match"). Closed rows carry exit fields and open
+    # rows carry mark fields, so pad both to the union. Every differing column
+    # is nullable, so the padding is a real value, not a placeholder.
+    rows = closed_rows + open_rows
+    if rows:
+        keys = sorted({k for r in rows for k in r})
+        rows = [{k: r.get(k) for k in keys} for r in rows]
+    sb.upsert("paper_positions", rows, on_conflict="account_id,symbol,entry_date")
 
     snaps = [{
         "account_id": aid,
@@ -174,7 +181,7 @@ def main() -> int:
         "start_date": args.start,
         "cash": _num(res.cash),
         "equity": _num(res.equity.iloc[-1]),
-        "last_run_at": pd.Timestamp.utcnow().isoformat(),
+        "last_run_at": pd.Timestamp.now("UTC").isoformat(),
         "data_through": s["end"],
     }], on_conflict="id")
 
