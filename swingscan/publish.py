@@ -80,6 +80,12 @@ class SupabaseREST:
         if r.status_code >= 300:
             raise RuntimeError(f"delete {table}: {r.status_code} {r.text[:300]}")
 
+    def select(self, table: str, select: str = "*", **filters: str) -> list[dict]:
+        r = self.s.get(f"{self.base}/{table}", params={"select": select, **filters})
+        if r.status_code >= 300:
+            raise RuntimeError(f"select {table}: {r.status_code} {r.text[:300]}")
+        return r.json()
+
 
 def _num(v) -> float | None:
     """JSON-safe float (NaN/inf -> None)."""

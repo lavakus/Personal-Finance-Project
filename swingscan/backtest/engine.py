@@ -106,6 +106,10 @@ class Trade:
     sector: str | None
     score: float
     year: int
+    # The stop the trade was entered on. pos.stop mutates (breakeven trail after
+    # T1), so the initial level has to be recorded or it is lost. Defaulted so
+    # existing constructions keep working.
+    initial_stop: float = 0.0
 
 
 @dataclass
@@ -312,4 +316,5 @@ def _finalize(pos: Position, day: pd.Timestamp, reason: str, cfg: Config) -> Tra
         exit_reason=reason, t1_hit=pos.t1_hit,
         t2_hit=reason == "t2", regime=pos.regime, sector=pos.sector,
         score=pos.score, year=day.year,
+        initial_stop=pos.entry_price - pos.risk_per_share,
     )
