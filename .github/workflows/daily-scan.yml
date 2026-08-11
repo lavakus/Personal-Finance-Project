@@ -30,6 +30,15 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: uv run python -m swingscan.evaluate
+      # Runs AFTER the scan, because the book trades that day's signals. The
+      # replay is idempotent and causal, so a missed day repairs itself on the
+      # next run -- no incremental state to drift.
+      - name: Update paper book
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: uv run python -m swingscan.publish_paper
+
       - name: Save text report artifact
         if: always()
         run: uv run swingscan scan || true

@@ -18,6 +18,7 @@ import {
   Layers,
   LineChart,
   Newspaper,
+  NotebookPen,
   Receipt,
   Search,
   Settings,
@@ -84,6 +85,7 @@ const NAV: Array<{ group: string; items: Item[] }> = [
     group: "System",
     items: [
       { label: "Bots", href: "/bots", icon: Bot, phase: 8 },
+      { label: "Paper book", href: "/paper", icon: NotebookPen, phase: 11 },
       { label: "Analytics", href: "/analytics", icon: BarChart3, phase: 10 },
       { label: "Alerts", href: "/alerts", icon: Bell, phase: 9 },
       { label: "Settings", href: "/settings", icon: Settings },
