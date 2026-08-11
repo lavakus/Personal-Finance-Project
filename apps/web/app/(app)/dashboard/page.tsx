@@ -64,6 +64,7 @@ export default async function DashboardPage() {
     event_date: string;
   }> | null = null;
   let liveBots: Array<{ id: string; name: string; online: boolean }> | null = null;
+  let scanError: string | null = null;
 
   if (!isDemoMode) {
     const sb = await createServerSupabase();
@@ -93,6 +94,10 @@ export default async function DashboardPage() {
       scanReady = true;
     } catch (e) {
       if (!isMigrationPending(e)) throw e;
+      // Keep the reason. A bare "apply a migration" notice once hid a real
+      // regression (the query asked for a column that no migration provided)
+      // and the dashboard silently showed a placeholder over live scan data.
+      scanError = e instanceof Error ? e.message : String(e);
     }
     const [newsRes, eventsRes, botsRes] = await Promise.all([
       sb
@@ -298,7 +303,15 @@ export default async function DashboardPage() {
           }
         >
           {!isDemoMode && !scanReady ? (
-            <Empty>The swingscan screener activates once migration 0005 is applied.</Empty>
+            <Empty>
+              Scan read failed — apply pending migrations in the Supabase SQL
+              editor, then reload.
+              {scanError ? (
+                <span className="mt-1 block font-mono text-[11px] opacity-70">
+                  {scanError}
+                </span>
+              ) : null}
+            </Empty>
           ) : !isDemoMode && !liveScan ? (
             <Empty>
               No scans published yet — trigger the daily-scan action or run{" "}

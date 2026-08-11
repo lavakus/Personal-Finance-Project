@@ -28,10 +28,15 @@ export default async function ScreenerPage() {
     run = await getLatestScan(sb);
   } catch (e) {
     if (!isMigrationPending(e)) throw e;
+    // Show the actual message: this notice used to assert "0005 is missing"
+    // for any schema error, which masked a query regression as a setup step.
     return (
       <div className="rounded-lg border border-(--color-warn)/40 bg-(--color-warn)/10 px-4 py-3 text-[13px] text-(--color-warn)">
-        Database migration <span className="font-mono font-semibold">0005_intelligence.sql</span> has
-        not been applied yet — run it in the Supabase SQL editor, then reload.
+        Scan read failed — apply pending migrations in the Supabase SQL editor,
+        then reload.
+        <span className="mt-1 block font-mono text-[11px] opacity-70">
+          {e instanceof Error ? e.message : String(e)}
+        </span>
       </div>
     );
   }

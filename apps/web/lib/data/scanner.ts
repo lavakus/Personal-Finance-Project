@@ -42,11 +42,12 @@ export interface StockRankingRow {
   why: string[];
   warnings: string[];
   rs_excess_nifty_20d: string | null;
-  /** Factor-engine fields; null for the timing engine. */
-  weight_pct: string | null;
-  momentum_pct: string | null;
-  vol_annual_pct: string | null;
-  hold_until: string | null;
+  /** Factor-engine fields (migration 0009). Optional because the swing path
+   *  does not select them — absent, not merely null, on those rows. */
+  weight_pct?: string | null;
+  momentum_pct?: string | null;
+  vol_annual_pct?: string | null;
+  hold_until?: string | null;
   trade_plans: TradePlanRow | null;
 }
 
@@ -71,23 +72,34 @@ export interface ScanRunRow {
 export const ENGINE_SWING = "swingscan";
 export const ENGINE_MOMENTUM = "momentum";
 
-const RUN_SELECT = `id, run_date, engine, engine_version, universe, regime_label,
+const RANKING_BASE = `id, rank, symbol, name, sector, sector_rank, price, atr,
+     setup_type, score_total, score_tier, score_components, score_weights,
+     why, warnings, rs_excess_nifty_20d, trade_plans (*)`;
+
+/** Columns added by migration 0009. Requested ONLY by the momentum path:
+ *  asking for them on the swing path made the whole query fail with
+ *  "column does not exist" until 0009 was applied, which silently hid live
+ *  scan data behind a migration-pending placeholder. A new engine's schema
+ *  must never be a dependency of an existing feature. */
+const RANKING_FACTOR = `weight_pct, momentum_pct, vol_annual_pct, hold_until`;
+
+function runSelect(withFactorCols: boolean): string {
+  const cols = withFactorCols
+    ? `${RANKING_BASE}, ${RANKING_FACTOR}`
+    : RANKING_BASE;
+  return `id, run_date, engine, engine_version, universe, regime_label,
    regime_score, funnel, no_trade, no_trade_reason, near_misses,
-   stock_rankings (
-     id, rank, symbol, name, sector, sector_rank, price, atr, setup_type,
-     score_total, score_tier, score_components, score_weights, why,
-     warnings, rs_excess_nifty_20d, weight_pct, momentum_pct,
-     vol_annual_pct, hold_until,
-     trade_plans (*)
-   )`;
+   stock_rankings ( ${cols} )`;
+}
 
 async function latestRunFor(
   sb: SupabaseClient,
-  engine: string
+  engine: string,
+  withFactorCols: boolean
 ): Promise<ScanRunRow | null> {
   const { data, error } = await sb
     .from("scan_runs")
-    .select(RUN_SELECT)
+    .select(runSelect(withFactorCols))
     .eq("engine", engine)
     .order("run_date", { ascending: false })
     .limit(1)
@@ -99,18 +111,20 @@ async function latestRunFor(
   return run;
 }
 
-/** Latest swing-scanner run (pullback/breakout timing engine). */
+/** Latest swing-scanner run (pullback/breakout timing engine).
+ *  Deliberately does not request migration-0009 columns — see RANKING_FACTOR. */
 export async function getLatestScan(
   sb: SupabaseClient
 ): Promise<ScanRunRow | null> {
-  return latestRunFor(sb, ENGINE_SWING);
+  return latestRunFor(sb, ENGINE_SWING, false);
 }
 
-/** Latest momentum-core rebalance (cross-sectional factor engine). */
+/** Latest momentum-core rebalance (cross-sectional factor engine).
+ *  Requires migration 0009; the page surfaces that as a pending notice. */
 export async function getLatestMomentum(
   sb: SupabaseClient
 ): Promise<ScanRunRow | null> {
-  return latestRunFor(sb, ENGINE_MOMENTUM);
+  return latestRunFor(sb, ENGINE_MOMENTUM, true);
 }
 
 export interface SectorRankingRow {
