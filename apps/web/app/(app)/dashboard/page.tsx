@@ -63,7 +63,18 @@ export default async function DashboardPage() {
     event_type: string;
     event_date: string;
   }> | null = null;
-  let liveBots: Array<{ id: string; name: string; online: boolean }> | null = null;
+  let liveBots: Array<{
+    id: string;
+    name: string;
+    online: boolean;
+    open: Array<{
+      symbol: string;
+      direction: string;
+      entry_price: string;
+      quantity: string;
+      opened_at: string;
+    }>;
+  }> | null = null;
   let scanError: string | null = null;
 
   if (!isDemoMode) {
@@ -112,18 +123,46 @@ export default async function DashboardPage() {
         .gte("event_date", new Date().toISOString().slice(0, 10))
         .order("event_date")
         .limit(5),
-      sb.from("bots").select("id, name, last_heartbeat_at").order("created_at").limit(6),
+      // A bot's OPEN positions live in bot_trades, which this page never read:
+      // the "Active trades" card below is the `trades` table (manual/swing NSE
+      // positions), a different table entirely. So an open MT5 position showed
+      // up nowhere on the dashboard and the bot looked idle while holding risk.
+      sb
+        .from("bots")
+        .select(
+          `id, name, last_heartbeat_at,
+           bot_trades!left (symbol, direction, status, entry_price, quantity, opened_at)`
+        )
+        // Filter the embed server-side: fetching every trade ever just to keep
+        // the open ones would grow without bound. !left keeps bots that have no
+        // open position (verified: they come back with an empty array).
+        .not("bot_trades.status", "eq", "CLOSED")
+        .order("created_at")
+        .limit(6),
     ]);
     if (!newsRes.error) liveNews = newsRes.data;
     if (!eventsRes.error) liveEvents = eventsRes.data;
     if (!botsRes.error) {
-      liveBots = botsRes.data.map((b) => ({
-        id: b.id,
-        name: b.name,
-        online: b.last_heartbeat_at
-          ? Date.now() - new Date(b.last_heartbeat_at).getTime() < 30 * 60000
-          : false,
-      }));
+      liveBots = botsRes.data.map((b) => {
+        const rows = (b.bot_trades ?? []) as Array<{
+          symbol: string;
+          direction: string;
+          status: string;
+          entry_price: string;
+          quantity: string;
+          opened_at: string;
+        }>;
+        return {
+          id: b.id,
+          name: b.name,
+          online: b.last_heartbeat_at
+            ? Date.now() - new Date(b.last_heartbeat_at).getTime() < 30 * 60000
+            : false,
+          open: [...rows].sort((x, y) =>
+            y.opened_at.localeCompare(x.opened_at)
+          ),
+        };
+      });
     }
   }
 
@@ -577,12 +616,38 @@ export default async function DashboardPage() {
               {liveBots.map((b) => (
                 <li
                   key={b.id}
-                  className="flex items-center justify-between rounded-lg border border-(--color-border) bg-(--color-surface-2) px-3 py-2"
+                  className="rounded-lg border border-(--color-border) bg-(--color-surface-2) px-3 py-2"
                 >
-                  <span className="truncate font-medium">{b.name}</span>
-                  <Badge tone={b.online ? "gain" : "warn"} dot>
-                    {b.online ? "online" : "idle"}
-                  </Badge>
+                  <div className="flex items-center justify-between">
+                    <span className="truncate font-medium">{b.name}</span>
+                    <Badge tone={b.online ? "gain" : "warn"} dot>
+                      {b.online ? "online" : "idle"}
+                    </Badge>
+                  </div>
+                  {/* "online with no position" and "online holding risk" are
+                      very different states and must not look identical. */}
+                  {b.open.length > 0 ? (
+                    <div className="mt-1.5 space-y-1 border-t border-(--color-border) pt-1.5">
+                      {b.open.map((t) => (
+                        <div
+                          key={`${t.symbol}-${t.opened_at}`}
+                          className="flex items-center justify-between gap-2 text-[11px]"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Badge tone="accent">{t.direction}</Badge>
+                            <span className="font-medium">{t.symbol}</span>
+                          </span>
+                          <span className="num text-(--color-text-dim)">
+                            {Number(t.quantity)} @ {Number(t.entry_price)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-1 text-[11px] text-(--color-text-faint)">
+                      no open position
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
