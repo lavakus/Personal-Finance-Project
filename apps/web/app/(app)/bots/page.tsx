@@ -25,6 +25,40 @@ interface BotRow {
   bot_equity_snapshots: Array<{ equity: string; as_of: string }>;
 }
 
+/** One executed trade. The bots table above shows only aggregates, which made
+ *  a live bot look idle: you could see "3 trades, 33% win" but not what it
+ *  bought, when, or why it closed. Every field below is already stored by the
+ *  sink -- this just renders it. */
+interface TradeRow {
+  id: string;
+  symbol: string;
+  direction: string;
+  status: string;
+  entry_price: string;
+  exit_price: string | null;
+  quantity: string;
+  pnl: string | null;
+  opened_at: string;
+  closed_at: string | null;
+  raw: {
+    setup?: string;
+    reason?: string;
+    exit_reason?: string;
+    r_multiple?: number;
+    risk_usd?: number;
+    initial_stop?: number;
+  } | null;
+  bots: { name: string } | null;
+}
+
+function heldFor(openedAt: string, closedAt: string | null): string {
+  const end = closedAt ? new Date(closedAt).getTime() : Date.now();
+  const hours = (end - new Date(openedAt).getTime()) / 3_600_000;
+  if (hours < 1) return `${Math.round(hours * 60)}m`;
+  if (hours < 48) return `${hours.toFixed(1)}h`;
+  return `${(hours / 24).toFixed(1)}d`;
+}
+
 /** Bots + analytics (brief §63, §65). All stats derive from ingested
  *  trades — never self-reported summaries. */
 export default async function BotsPage() {
@@ -57,6 +91,24 @@ export default async function BotsPage() {
         not been applied yet — run it in the Supabase SQL editor, then reload.
       </div>
     );
+  }
+
+  // Separate query: the nested bot_trades above is unordered and unlimited,
+  // which is fine for aggregates but wrong for a log.
+  let trades: TradeRow[] = [];
+  try {
+    const { data, error } = await sb
+      .from("bot_trades")
+      .select(
+        `id, symbol, direction, status, entry_price, exit_price, quantity,
+         pnl, opened_at, closed_at, raw, bots (name)`
+      )
+      .order("opened_at", { ascending: false })
+      .limit(50);
+    if (error) throw new Error(error.message);
+    trades = data as unknown as TradeRow[];
+  } catch (e) {
+    if (!isMigrationPending(e)) throw e;
   }
 
   const now = Date.now();
@@ -171,6 +223,94 @@ export default async function BotsPage() {
           <p className="mt-3 text-[11px] text-(--color-text-faint)">
             Stats are computed from ingested closed trades only. Sharpe and
             drawdown activate once equity snapshots accumulate.
+          </p>
+        </Card>
+      )}
+
+      {trades.length > 0 && (
+        <Card title={`Trade log (${trades.length})`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-wide text-(--color-text-faint)">
+                  <th className="pb-2 font-medium">Opened</th>
+                  <th className="pb-2 font-medium">Symbol</th>
+                  <th className="pb-2 font-medium">Setup</th>
+                  <th className="pb-2 font-medium">Dir</th>
+                  <th className="pb-2 text-right font-medium">Entry</th>
+                  <th className="pb-2 text-right font-medium">Stop</th>
+                  <th className="pb-2 text-right font-medium">Exit</th>
+                  <th className="pb-2 text-right font-medium">Lots</th>
+                  <th className="pb-2 text-right font-medium">Held</th>
+                  <th className="pb-2 text-right font-medium">R</th>
+                  <th className="pb-2 text-right font-medium">P&L</th>
+                  <th className="pb-2 font-medium">Closed by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trades.map((t) => {
+                  const open = t.status !== "CLOSED";
+                  const r = t.raw?.r_multiple;
+                  return (
+                    <tr key={t.id} className="border-t border-(--color-border)">
+                      <td className="py-2 whitespace-nowrap text-[12px] text-(--color-text-dim)">
+                        {new Date(t.opened_at).toLocaleString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="font-semibold">{t.symbol}</td>
+                      <td className="text-[12px] text-(--color-text-dim)">
+                        {t.raw?.setup ?? "—"}
+                      </td>
+                      <td>
+                        <Badge tone={t.direction === "LONG" ? "gain" : "loss"}>
+                          {t.direction}
+                        </Badge>
+                      </td>
+                      <td className="num text-right">{Number(t.entry_price)}</td>
+                      <td className="num text-right text-(--color-text-faint)">
+                        {t.raw?.initial_stop
+                          ? Number(t.raw.initial_stop).toFixed(2)
+                          : "—"}
+                      </td>
+                      <td className="num text-right">
+                        {t.exit_price !== null ? Number(t.exit_price) : "—"}
+                      </td>
+                      <td className="num text-right">{Number(t.quantity)}</td>
+                      <td className="num text-right text-(--color-text-dim)">
+                        {heldFor(t.opened_at, t.closed_at)}
+                      </td>
+                      <td className="num text-right">
+                        {typeof r === "number" ? (
+                          <PnL value={r} suffix="R" />
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="num text-right">
+                        {t.pnl !== null ? <PnL value={Number(t.pnl)} /> : "—"}
+                      </td>
+                      <td className="text-[12px]">
+                        {open ? (
+                          <Badge tone="warn">OPEN</Badge>
+                        ) : (
+                          <span className="text-(--color-text-dim)">
+                            {t.raw?.exit_reason ?? "—"}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-[11px] text-(--color-text-faint)">
+            Last 50 trades as reported by the bots. R is measured against the
+            initial stop; an open trade shows no R or P&L until it closes.
           </p>
         </Card>
       )}
