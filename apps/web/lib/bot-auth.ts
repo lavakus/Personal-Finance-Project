@@ -70,7 +70,16 @@ export async function verifyBotRequest(
     .select("bot_id, revoked_at, bots (user_id)")
     .eq("key_hash", keyHash)
     .maybeSingle();
-  if (error || !data || data.revoked_at) {
+  // A failed LOOKUP is not a failed AUTH. Folding `error` into the 401 below
+  // reported transient Supabase blips as "unknown or revoked key", which sent me
+  // hunting a revocation that never happened: both bots' keys hash exactly to
+  // live, unrevoked rows, yet gold logged 8 of these in a day while most of its
+  // heartbeats landed fine. 503 says "retry", 401 says "stop and re-key" -- a
+  // bot cannot choose correctly if both arrive under the same message.
+  if (error) {
+    return { ok: false, status: 503, error: `key lookup failed: ${error.message}` };
+  }
+  if (!data || data.revoked_at) {
     return { ok: false, status: 401, error: "unknown or revoked key" };
   }
 
