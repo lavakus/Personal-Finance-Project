@@ -22,6 +22,7 @@ from datetime import date
 import pandas as pd
 
 from .config import Config
+from . import telegram
 from .loader import load_market_data
 from .paper import PaperConfig, run_paper, summarize
 from .publish import SupabaseREST, _num
@@ -187,6 +188,21 @@ def main() -> int:
 
     log.info("published %d closed + %d open positions, %d snapshots",
              len(closed_rows), len(open_rows), len(snaps))
+
+    # Alert on TODAY'S activity only. The paper engine replays the entire history on
+    # every run, so alerting on the whole book would re-announce every trade daily.
+    # `s["end"]` is the last bar the book is marked to, so a position opened or closed
+    # on that date is genuinely new since the previous run.
+    if telegram.enabled():
+        today = str(s["end"])
+        new_open = [r for r in open_rows if r["entry_date"] == today]
+        new_closed = [r for r in closed_rows if r["exit_date"] == today]
+        msg = telegram.paper_alert(new_open, new_closed,
+                                   float(res.equity.iloc[-1]), float(pcfg.capital))
+        if msg:
+            telegram.send(msg)
+        else:
+            log.info("no paper activity on %s, no alert sent", today)
     return 0
 
 

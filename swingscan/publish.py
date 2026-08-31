@@ -28,6 +28,7 @@ import pandas as pd
 import requests
 
 from .config import Config
+from . import telegram
 from .loader import load_market_data
 from .pipeline import ScanResult, scan_asof
 from .trade_plan import (
@@ -229,6 +230,12 @@ def main() -> int:
     publish(res, SupabaseREST(url, key))
     print(f"Published scan for {trade_day.date()}: "
           f"{len(res.candidates)} candidates, no_trade={res.no_trade}")
+
+    # Alert AFTER a successful publish, never before: a Telegram message announcing
+    # setups that failed to reach the dashboard would be worse than no message.
+    # send() swallows its own errors, so a Telegram outage cannot fail the scan.
+    if telegram.enabled():
+        telegram.send(telegram.scan_alert(res))
     return 0
 
 
