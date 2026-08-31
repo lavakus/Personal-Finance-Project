@@ -24,7 +24,8 @@
 #>
 
 param(
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$ReportOnly     # just the end-of-day Telegram report, nothing else
 )
 
 $ErrorActionPreference = "Continue"
@@ -33,6 +34,10 @@ $LogDir  = Join-Path $Root "logs"
 $LogFile = Join-Path $LogDir ("scan-" + (Get-Date -Format "yyyy-MM-dd") + ".log")
 
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
+
+# Tee-Object can't do utf8 on PS 5.1 (no -Encoding param; default is UTF-16),
+# so stream through this instead: echo each line AND append it, pinned to utf8.
+filter Tee-Utf8 { Add-Content -Path $LogFile -Value ($_ | Out-String -NoNewline) -Encoding utf8; $_ }
 
 function Write-Log($msg) {
     $line = "{0}  {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg
@@ -81,7 +86,7 @@ $env:OMP_NUM_THREADS      = "1"
 
 if ($DryRun) {
     Write-Log "dry run: scanning only, publishing nothing"
-    & uv run swingscan scan 2>&1 | Tee-Object -FilePath $LogFile -Append -Encoding utf8
+    & uv run swingscan scan 2>&1 | Tee-Utf8
     Write-Log "=== run_scan finished (dry run) ==="
     exit 0
 }
@@ -93,13 +98,19 @@ if ($DryRun) {
 $steps = @(
     @{ Name = "scan + publish";    Module = "swingscan.publish" },
     @{ Name = "evaluate signals";  Module = "swingscan.evaluate" },
-    @{ Name = "paper book";        Module = "swingscan.publish_paper" }
+    @{ Name = "paper book";        Module = "swingscan.publish_paper" },
+    # Last on purpose: the report reads what the three steps above just wrote,
+    # so it always describes the state the dashboard is showing.
+    @{ Name = "daily report";      Module = "swingscan.report" }
 )
+if ($ReportOnly) {
+    $steps = @( @{ Name = "daily report"; Module = "swingscan.report" } )
+}
 
 $failed = @()
 foreach ($s in $steps) {
     Write-Log "--- $($s.Name) ---"
-    & uv run python -m $($s.Module) 2>&1 | Tee-Object -FilePath $LogFile -Append -Encoding utf8
+    & uv run python -m $($s.Module) 2>&1 | Tee-Utf8
     if ($LASTEXITCODE -ne 0) {
         Write-Log "STEP FAILED: $($s.Name) exited $LASTEXITCODE"
         $failed += $s.Name
